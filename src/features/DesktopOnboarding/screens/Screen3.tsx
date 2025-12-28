@@ -159,14 +159,14 @@ const initialPermissions = [
     title: 'Notification Permission',
   },
   {
-    buttonText: 'Grant Access',
+    buttonText: 'Open Settings',
     description:
-      'Access documents and files to enable AI analysis, knowledge base creation, and document processing workflows',
+      'Enable Full Disk Access so the app can read and index files for AI analysis. In System Settings, click “+” to add this app, then turn the toggle on.',
     granted: false,
     icon: FolderOpen,
     iconColor: themeToken.colorGreen,
     id: 2,
-    title: 'File & Folder Access',
+    title: 'Full Disk Access',
   },
   {
     buttonText: 'Grant Access',
@@ -288,7 +288,7 @@ export const Screen3 = ({ onScreenConfigChange }: Screen3Props) => {
         break;
       }
       case 2: {
-        await ipc.system.openFullDiskAccessSettings();
+        await ipc.system.openFullDiskAccessSettings({ autoAdd: true });
         break;
       }
       case 3: {
