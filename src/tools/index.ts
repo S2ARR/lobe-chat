@@ -1,19 +1,18 @@
 import { AgentBuilderManifest } from '@lobechat/builtin-tool-agent-builder';
+import { CloudSandboxManifest } from '@lobechat/builtin-tool-cloud-sandbox';
 import { GroupAgentBuilderManifest } from '@lobechat/builtin-tool-group-agent-builder';
 import { GroupManagementManifest } from '@lobechat/builtin-tool-group-management';
 import { GTDManifest } from '@lobechat/builtin-tool-gtd';
+import { KnowledgeBaseManifest } from '@lobechat/builtin-tool-knowledge-base';
 import { LocalSystemManifest } from '@lobechat/builtin-tool-local-system';
 import { MemoryManifest } from '@lobechat/builtin-tool-memory';
 import { NotebookManifest } from '@lobechat/builtin-tool-notebook';
 import { PageAgentManifest } from '@lobechat/builtin-tool-page-agent';
+import { WebBrowsingManifest } from '@lobechat/builtin-tool-web-browsing';
+import { isDesktop } from '@lobechat/const';
 import { type LobeBuiltinTool } from '@lobechat/types';
 
-import { isDesktop } from '@/const/version';
-
 import { ArtifactsManifest } from './artifacts';
-import { CodeInterpreterManifest } from './code-interpreter';
-import { KnowledgeBaseManifest } from './knowledge-base';
-import { WebBrowsingManifest } from './web-browsing';
 
 export const builtinTools: LobeBuiltinTool[] = [
   {
@@ -39,8 +38,8 @@ export const builtinTools: LobeBuiltinTool[] = [
     type: 'builtin',
   },
   {
-    identifier: CodeInterpreterManifest.identifier,
-    manifest: CodeInterpreterManifest,
+    identifier: CloudSandboxManifest.identifier,
+    manifest: CloudSandboxManifest,
     type: 'builtin',
   },
   {
@@ -74,13 +73,11 @@ export const builtinTools: LobeBuiltinTool[] = [
     type: 'builtin',
   },
   {
-    hidden: true,
     identifier: GTDManifest.identifier,
     manifest: GTDManifest,
     type: 'builtin',
   },
   {
-    hidden: true,
     identifier: NotebookManifest.identifier,
     manifest: NotebookManifest,
     type: 'builtin',

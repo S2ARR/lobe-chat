@@ -27,25 +27,26 @@
       "content": "Can you ask the backend developer about the API design?",
       "parentId": null,
       "createdAt": 1704067200000,
-      "updatedAt": 1704067200000,
-      "meta": {}
+      "updatedAt": 1704067200000
     },
     {
       "id": "msg-supervisor-1",
-      "role": "assistantGroup",
+      "role": "supervisor",
       "agentId": "supervisor",
       "content": "",
       "parentId": "msg-user-1",
       "createdAt": 1704067201000,
       "updatedAt": 1704067201000,
-      "meta": {
-        "avatar": "supervisor",
-        "title": "Supervisor"
+      "metadata": {
+        "isSupervisor": true
       },
       "children": [
         {
           "id": "msg-supervisor-1",
           "content": "I'll ask the backend developer to explain the API design.",
+          "metadata": {
+            "isSupervisor": true
+          },
           "tools": [
             {
               "apiName": "speak",
@@ -75,11 +76,7 @@
       "model": "gpt-4",
       "provider": "openai",
       "createdAt": 1704067205000,
-      "updatedAt": 1704067205000,
-      "meta": {
-        "avatar": "backend-dev",
-        "title": "Backend Developer"
-      }
+      "updatedAt": 1704067205000
     }
   ],
   "messageMap": {
@@ -89,12 +86,11 @@
       "content": "Can you ask the backend developer about the API design?",
       "parentId": null,
       "createdAt": 1704067200000,
-      "updatedAt": 1704067200000,
-      "meta": {}
+      "updatedAt": 1704067200000
     },
     "msg-supervisor-1": {
       "id": "msg-supervisor-1",
-      "role": "assistant",
+      "role": "supervisor",
       "agentId": "supervisor",
       "content": "I'll ask the backend developer to explain the API design.",
       "parentId": "msg-user-1",
@@ -112,9 +108,8 @@
       ],
       "createdAt": 1704067201000,
       "updatedAt": 1704067201000,
-      "meta": {
-        "avatar": "supervisor",
-        "title": "Supervisor"
+      "metadata": {
+        "isSupervisor": true
       }
     },
     "msg-speak-tool-1": {
@@ -124,8 +119,7 @@
       "parentId": "msg-supervisor-1",
       "tool_call_id": "call_speak_1",
       "createdAt": 1704067202000,
-      "updatedAt": 1704067202000,
-      "meta": {}
+      "updatedAt": 1704067202000
     },
     "msg-agent-backend-1": {
       "id": "msg-agent-backend-1",
@@ -136,11 +130,7 @@
       "model": "gpt-4",
       "provider": "openai",
       "createdAt": 1704067205000,
-      "updatedAt": 1704067205000,
-      "meta": {
-        "avatar": "backend-dev",
-        "title": "Backend Developer"
-      }
+      "updatedAt": 1704067205000
     }
   }
 }

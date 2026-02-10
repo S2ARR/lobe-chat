@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest # 只在 ubuntu 上运行一次检查
     steps:
       - name: Checkout base
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -33,18 +33,18 @@ jobs:
         uses: ./.github/actions/setup-node-bun
         with:
           node-version: 24.11.1
-          bun-version: 1.2.23
+          bun-version: latest
           package-manager-cache: 'false'
 
       - name: Install deps
         run: bun i
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Lint
         run: bun run lint
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
 
   version:
     name: Determine version
@@ -55,7 +55,7 @@ jobs:
       # 输出版本信息，供后续 job 使用
       version: ${{ steps.set_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
           echo "📦 Release Version: ${version} (based on base version ${base_version})"
 
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
 
       # 输出版本信息总结，方便在 GitHub Actions 界面查看
       - name: Version Summary
@@ -95,7 +95,7 @@ jobs:
       matrix:
         os: [macos-latest, macos-15-intel, windows-2025, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -108,6 +108,17 @@ jobs:
       # node-linker=hoisted 模式将可以确保 asar 压缩可用
       - name: Install dependencies
         run: pnpm install --node-linker=hoisted
+
+      # 移除国内 electron 镜像配置，GitHub Actions 使用官方源更快
+      - name: Remove China electron mirror from .npmrc
+        shell: bash
+        run: |
+          NPMRC_FILE="./apps/desktop/.npmrc"
+          if [ -f "$NPMRC_FILE" ]; then
+            sed -i.bak '/^electron_mirror=/d; /^electron_builder_binaries_mirror=/d' "$NPMRC_FILE"
+            rm -f "${NPMRC_FILE}.bak"
+            echo "✅ Removed electron mirror config from .npmrc"
+          fi
 
       - name: Install deps on Desktop
         run: npm run install-isolated --prefix=./apps/desktop
@@ -194,7 +205,7 @@ jobs:
 
       # 上传构建产物
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.os }}
           path: |
@@ -218,18 +229,18 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Node & Bun
         uses: ./.github/actions/setup-node-bun
         with:
           node-version: 24.11.1
-          bun-version: 1.2.23
+          bun-version: latest
           package-manager-cache: 'false'
 
       # 下载所有平台的构建产物
       - name: Download artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: release
           pattern: release-*
@@ -255,7 +266,7 @@ jobs:
 
       # 上传合并后的构建产物
       - name: Upload artifacts with merged macOS files
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: merged-release-pr
           path: release/
@@ -274,13 +285,13 @@ jobs:
     outputs:
       artifact_path: ${{ steps.set_path.outputs.path }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       # 下载合并后的构建产物
       - name: Download merged artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: merged-release-pr
           path: release

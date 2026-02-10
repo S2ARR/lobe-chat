@@ -1,11 +1,10 @@
-import { Avatar, type MenuProps } from '@lobehub/ui';
-import { Dropdown } from '@lobehub/ui';
+import { Avatar, Icon } from '@lobehub/ui';
 import { FileTextIcon } from 'lucide-react';
-import { type CSSProperties, memo, useCallback, useMemo } from 'react';
+import { type MouseEvent, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import NavItem from '@/features/NavPanel/components/NavItem';
-import { documentSelectors, useFileStore } from '@/store/file';
+import { pageSelectors, usePageStore } from '@/store/page';
 
 import Actions from './Actions';
 import Editing from './Editing';
@@ -13,79 +12,68 @@ import { useDropdownMenu } from './useDropdownMenu';
 
 interface DocumentItemProps {
   className?: string;
-  documentId: string;
-  style?: CSSProperties;
+  pageId: string;
 }
 
-const PageListItem = memo<DocumentItemProps>(({ documentId, style, className }) => {
+const PageListItem = memo<DocumentItemProps>(({ pageId, className }) => {
   const { t } = useTranslation('file');
-  const [editing, selectedPageId, document] = useFileStore(
-    useCallback(
-      (s) => {
-        const doc = documentSelectors.getDocumentById(documentId)(s);
-        return [s.renamingPageId === documentId, s.selectedPageId, doc] as const;
-      },
-      [documentId],
-    ),
-  );
+  const [editing, selectedPageId, document] = usePageStore((s) => {
+    const doc = pageSelectors.getDocumentById(pageId)(s);
+    return [s.renamingPageId === pageId, s.selectedPageId, doc] as const;
+  });
 
-  const selectPage = useFileStore((s) => s.selectPage);
-  const setRenamingPageId = useFileStore((s) => s.setRenamingPageId);
+  const selectPage = usePageStore((s) => s.selectPage);
+  const setRenamingPageId = usePageStore((s) => s.setRenamingPageId);
 
-  const active = selectedPageId === documentId;
+  const active = selectedPageId === pageId;
   const title = document?.title || t('pageList.untitled');
   const emoji = document?.metadata?.emoji;
 
   const toggleEditing = useCallback(
     (visible?: boolean) => {
-      setRenamingPageId(visible ? documentId : null);
+      setRenamingPageId(visible ? pageId : null);
     },
-    [documentId, setRenamingPageId],
+    [pageId, setRenamingPageId],
   );
 
-  const handleClick = useCallback(() => {
-    if (!editing) {
-      selectPage(documentId);
-    }
-  }, [editing, selectPage, documentId]);
+  const handleClick = useCallback(
+    (e: MouseEvent) => {
+      // Skip navigation in current tab when opening in new tab
+      if (e.metaKey || e.ctrlKey) return;
+      if (!editing) {
+        selectPage(pageId);
+      }
+    },
+    [editing, selectPage, pageId],
+  );
 
   // Icon with emoji support
   const icon = useMemo(() => {
     if (emoji) {
       return <Avatar avatar={emoji} size={28} />;
     }
-    return FileTextIcon;
+    return <Icon icon={FileTextIcon} size={{ size: 18, strokeWidth: 1.5 }} />;
   }, [emoji]);
 
-  const dropdownMenu: MenuProps['items'] = useDropdownMenu({
-    documentContent: document?.content || undefined,
-    documentId,
-    toggleEditing,
-  });
+  const dropdownMenu = useDropdownMenu({ pageId, toggleEditing });
 
   return (
     <>
-      <Dropdown
-        menu={{
-          items: dropdownMenu,
-        }}
-        trigger={['contextMenu']}
-      >
-        <NavItem
-          actions={<Actions dropdownMenu={dropdownMenu} />}
-          active={active}
-          className={className}
-          disabled={editing}
-          icon={icon}
-          key={documentId}
-          onClick={handleClick}
-          style={style}
-          title={title}
-        />
-      </Dropdown>
+      <NavItem
+        actions={<Actions dropdownMenu={dropdownMenu} />}
+        active={active}
+        className={className}
+        contextMenuItems={dropdownMenu}
+        disabled={editing}
+        href={`/page/${pageId}`}
+        icon={icon}
+        key={pageId}
+        onClick={handleClick}
+        title={title}
+      />
       <Editing
         currentEmoji={emoji}
-        documentId={documentId}
+        documentId={pageId}
         title={title}
         toggleEditing={toggleEditing}
       />

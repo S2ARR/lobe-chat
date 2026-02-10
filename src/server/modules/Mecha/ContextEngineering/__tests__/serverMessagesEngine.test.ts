@@ -9,7 +9,6 @@ describe('serverMessagesEngine', () => {
       content: 'Hello',
       createdAt: Date.now(),
       id: 'msg-1',
-      meta: {},
       role: 'user',
       updatedAt: Date.now(),
     } as UIChatMessage,
@@ -17,7 +16,6 @@ describe('serverMessagesEngine', () => {
       content: 'Hi there!',
       createdAt: Date.now(),
       id: 'msg-2',
-      meta: {},
       role: 'assistant',
       updatedAt: Date.now(),
     } as UIChatMessage,
@@ -67,32 +65,6 @@ describe('serverMessagesEngine', () => {
       });
 
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('history truncation', () => {
-    it('should truncate history when enabled', async () => {
-      const messages: UIChatMessage[] = [];
-      for (let i = 0; i < 20; i++) {
-        messages.push({
-          content: `Message ${i}`,
-          createdAt: Date.now(),
-          id: `msg-${i}`,
-          meta: {},
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          updatedAt: Date.now(),
-        } as UIChatMessage);
-      }
-
-      const result = await serverMessagesEngine({
-        enableHistoryCount: true,
-        historyCount: 5,
-        messages,
-        model: 'gpt-4',
-        provider: 'openai',
-      });
-
-      expect(result.length).toBeLessThanOrEqual(5);
     });
   });
 
@@ -147,7 +119,21 @@ describe('serverMessagesEngine', () => {
   describe('tools configuration', () => {
     it('should handle tools system roles', async () => {
       const messages = createBasicMessages();
-      const getToolSystemRoles = vi.fn().mockReturnValue('Tool instructions');
+      const mockManifests = [
+        {
+          identifier: 'tool1',
+          api: [{ name: 'action', description: 'Tool 1 action', parameters: {} }],
+          meta: { title: 'Tool 1' },
+          type: 'default' as const,
+          systemRole: 'Tool 1 instructions',
+        },
+        {
+          identifier: 'tool2',
+          api: [{ name: 'action', description: 'Tool 2 action', parameters: {} }],
+          meta: { title: 'Tool 2' },
+          type: 'default' as const,
+        },
+      ];
 
       const result = await serverMessagesEngine({
         capabilities: { isCanUseFC: () => true },
@@ -156,30 +142,37 @@ describe('serverMessagesEngine', () => {
         provider: 'openai',
         systemRole: 'Base system role',
         toolsConfig: {
-          getToolSystemRoles,
+          manifests: mockManifests,
           tools: ['tool1', 'tool2'],
         },
       });
 
-      expect(getToolSystemRoles).toHaveBeenCalled();
+      // Should inject tool system role when manifests are provided
+      const systemMessage = result.find((msg) => msg.role === 'system');
+      expect(systemMessage).toBeDefined();
       expect(result.length).toBeGreaterThan(0);
     });
 
-    it('should skip tool system role when no tools', async () => {
+    it('should skip tool system role when no manifests', async () => {
       const messages = createBasicMessages();
-      const getToolSystemRoles = vi.fn();
 
-      await serverMessagesEngine({
+      const result = await serverMessagesEngine({
         messages,
         model: 'gpt-4',
         provider: 'openai',
         toolsConfig: {
-          getToolSystemRoles,
+          manifests: [],
           tools: [],
         },
       });
 
-      expect(getToolSystemRoles).not.toHaveBeenCalled();
+      // Without manifests, no tool-related system role should be injected
+      const systemMessages = result.filter((msg) => msg.role === 'system');
+      const hasToolSystemRole = systemMessages.some((msg) => {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        return content.includes('plugins');
+      });
+      expect(hasToolSystemRole).toBe(false);
     });
   });
 
@@ -237,9 +230,13 @@ describe('serverMessagesEngine', () => {
         },
       });
 
-      // Should have user memory in system message
-      const systemMessages = result.filter((m) => m.role === 'system');
-      expect(systemMessages.length).toBeGreaterThan(0);
+      // User memories are injected as a consolidated user message before the first user message
+      // Note: meta/id fields are removed by the engine cleanup step, so assert via content.
+      const injection = result.find(
+        (m: any) => m.role === 'user' && String(m.content).includes('<user_memory>'),
+      );
+      expect(injection).toBeDefined();
+      expect(injection!.role).toBe('user');
     });
 
     it('should skip user memory when memories is undefined', async () => {
@@ -306,7 +303,6 @@ describe('serverMessagesEngine', () => {
           content: 'user input',
           createdAt: Date.now(),
           id: 'msg-1',
-          meta: {},
           role: 'user',
           updatedAt: Date.now(),
         } as UIChatMessage,

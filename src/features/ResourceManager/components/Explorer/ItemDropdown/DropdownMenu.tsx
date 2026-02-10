@@ -1,40 +1,19 @@
-import { ActionIcon, Dropdown } from '@lobehub/ui';
+import { ActionIcon, DropdownMenu as DropdownMenuUI } from '@lobehub/ui';
+import { type ItemType } from 'antd/es/menu/interface';
 import { MoreHorizontalIcon } from 'lucide-react';
 import { memo } from 'react';
 
-import { useFileItemDropdown } from './useFileItemDropdown';
-
 interface DropdownMenuProps {
-  fileType: string;
-  filename: string;
-  id: string;
-  knowledgeBaseId?: string;
-  onRenameStart?: () => void;
-  sourceType?: string;
-  url: string;
+  className?: string;
+  items: ItemType[] | (() => ItemType[]);
 }
 
-const DropdownMenu = memo<DropdownMenuProps>(
-  ({ id, knowledgeBaseId, url, filename, fileType, sourceType, onRenameStart }) => {
-    const { menuItems, moveModal } = useFileItemDropdown({
-      fileType,
-      filename,
-      id,
-      knowledgeBaseId,
-      onRenameStart,
-      sourceType,
-      url,
-    });
-
-    return (
-      <>
-        <Dropdown menu={{ items: menuItems }}>
-          <ActionIcon icon={MoreHorizontalIcon} size={'small'} />
-        </Dropdown>
-        {moveModal}
-      </>
-    );
-  },
-);
+const DropdownMenu = memo<DropdownMenuProps>(({ items, className }) => {
+  return (
+    <DropdownMenuUI items={items}>
+      <ActionIcon className={className} icon={MoreHorizontalIcon} size={'small'} />
+    </DropdownMenuUI>
+  );
+});
 
 export default DropdownMenu;

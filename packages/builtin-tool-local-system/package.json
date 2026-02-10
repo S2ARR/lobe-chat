@@ -4,7 +4,8 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./executionRuntime": "./src/ExecutionRuntime/index.ts"
+    "./client": "./src/client/index.ts",
+    "./executor": "./src/executor/index.ts"
   },
   "main": "./src/index.ts",
   "dependencies": {
@@ -12,5 +13,14 @@
   },
   "devDependencies": {
     "@lobechat/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "@lobehub/ui": "^4",
+    "antd": "^6",
+    "antd-style": "*",
+    "lucide-react": "*",
+    "path-browserify-esm": "*",
+    "react": "*",
+    "react-i18next": "*"
   }
 }

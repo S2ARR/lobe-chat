@@ -1,11 +1,14 @@
 import { AgentBuilderIdentifier } from '@lobechat/builtin-tool-agent-builder';
 import { GroupAgentBuilderIdentifier } from '@lobechat/builtin-tool-group-agent-builder';
-import { KLAVIS_SERVER_TYPES, isDesktop } from '@lobechat/const';
+import { GTDIdentifier } from '@lobechat/builtin-tool-gtd';
+import { KLAVIS_SERVER_TYPES, LOBEHUB_SKILL_PROVIDERS, isDesktop } from '@lobechat/const';
 import {
   type AgentBuilderContext,
   type AgentGroupConfig,
+  type GTDConfig,
   type GroupAgentBuilderContext,
   type GroupOfficialToolItem,
+  type LobeToolManifest,
   MessagesEngine,
 } from '@lobechat/context-engine';
 import { historySummaryPrompt } from '@lobechat/prompts';
@@ -15,17 +18,22 @@ import {
   type RuntimeStepContext,
   type UIChatMessage,
 } from '@lobechat/types';
-import { VARIABLE_GENERATORS } from '@lobechat/utils/client';
 import debug from 'debug';
 
 import { isCanUseFC } from '@/helpers/isCanUseFC';
+import { VARIABLE_GENERATORS } from '@/helpers/parserPlaceholder';
+import { notebookService } from '@/services/notebook';
 import { getAgentStoreState } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
 import { getChatGroupStoreState } from '@/store/agentGroup';
 import { agentGroupSelectors } from '@/store/agentGroup/selectors';
 import { getChatStoreState } from '@/store/chat';
 import { getToolStoreState } from '@/store/tool';
-import { builtinToolSelectors, klavisStoreSelectors, toolSelectors } from '@/store/tool/selectors';
+import {
+  builtinToolSelectors,
+  klavisStoreSelectors,
+  lobehubSkillStoreSelectors,
+} from '@/store/tool/selectors';
 
 import { isCanUseVideo, isCanUseVision } from '../helper';
 import {
@@ -53,6 +61,8 @@ interface ContextEngineeringContext {
    */
   initialContext?: RuntimeInitialContext;
   inputTemplate?: string;
+  /** Tool manifests with systemRole and API definitions */
+  manifests?: LobeToolManifest[];
   messages: UIChatMessage[];
   model: string;
   provider: string;
@@ -64,11 +74,14 @@ interface ContextEngineeringContext {
   stepContext?: RuntimeStepContext;
   systemRole?: string;
   tools?: string[];
+  /** Topic ID for GTD context injection */
+  topicId?: string;
 }
 
-// REVIEW：可能这里可以约束一下 identity，preference，exp 的 重新排序或者裁切过的上下文进来而不是全部丢进来
+// REVIEW: Maybe we can constrain identity, preference, exp to reorder or trim the context instead of passing everything in
 export const contextEngineering = async ({
   messages = [],
+  manifests,
   tools,
   model,
   provider,
@@ -83,6 +96,7 @@ export const contextEngineering = async ({
   groupId,
   initialContext,
   stepContext,
+  topicId,
 }: ContextEngineeringContext): Promise<OpenAIChatMessage[]> => {
   log('tools: %o', tools);
 
@@ -129,7 +143,8 @@ export const contextEngineering = async ({
         currentAgentRole,
         groupTitle: groupDetail.title || undefined,
         members,
-        systemPrompt: groupDetail.config?.systemPrompt || undefined,
+        // Use group.content as the group description (shared prompt/content)
+        systemPrompt: groupDetail.content || undefined,
       };
       log('agentGroup built: %o', agentGroup);
     }
@@ -207,6 +222,28 @@ export const contextEngineering = async ({
           }
         }
 
+        // Get LobehubSkill providers (if enabled)
+        const isLobehubSkillEnabled =
+          typeof window !== 'undefined' &&
+          window.global_serverConfigStore?.getState()?.serverConfig?.enableLobehubSkill;
+
+        if (isLobehubSkillEnabled) {
+          const allLobehubSkillServers = lobehubSkillStoreSelectors.getServers(toolState);
+
+          for (const provider of LOBEHUB_SKILL_PROVIDERS) {
+            const server = allLobehubSkillServers.find((s) => s.identifier === provider.id);
+
+            officialTools.push({
+              description: `LobeHub Skill Provider: ${provider.label}`,
+              enabled: enabledPlugins.includes(provider.id),
+              identifier: provider.id,
+              installed: !!server,
+              name: provider.label,
+              type: 'lobehub-skill',
+            });
+          }
+        }
+
         groupAgentBuilderContext = {
           config: {
             openingMessage: activeGroupDetail.config?.openingMessage || undefined,
@@ -242,13 +279,56 @@ export const contextEngineering = async ({
     .map((kb) => ({ description: kb.description, id: kb.id, name: kb.name }));
 
   // Resolve user memories: topic memories and global identities are independent layers
+  // Both functions now read from cache only (no network requests) to avoid blocking sendMessage
   let userMemoryData;
   if (enableUserMemories) {
-    const [topicMemories, globalIdentities] = await Promise.all([
-      resolveTopicMemories(),
-      Promise.resolve(resolveGlobalIdentities()),
-    ]);
+    const topicMemories = resolveTopicMemories();
+    const globalIdentities = resolveGlobalIdentities();
     userMemoryData = combineUserMemoryData(topicMemories, globalIdentities);
+  }
+
+  // Resolve GTD context: plan and todos
+  // GTD tool must be enabled and topicId must be provided
+  const isGTDEnabled = tools?.includes(GTDIdentifier) ?? false;
+  let gtdConfig: GTDConfig | undefined;
+
+  if (isGTDEnabled && topicId) {
+    try {
+      // Fetch plan document for the current topic
+      const planResult = await notebookService.listDocuments({
+        topicId,
+        type: 'agent/plan',
+      });
+
+      if (planResult.data.length > 0) {
+        const planDoc = planResult.data[0]; // Most recent plan
+
+        // Build plan object for injection
+        const plan = {
+          completed: false, // TODO: Add completed field to document if needed
+          context: planDoc.content ?? undefined,
+          createdAt: planDoc.createdAt.toISOString(),
+          description: planDoc.description || '',
+          goal: planDoc.title || '',
+          id: planDoc.id,
+          updatedAt: planDoc.updatedAt.toISOString(),
+        };
+
+        // Get todos from plan's metadata
+        const todos = planDoc.metadata?.todos;
+
+        gtdConfig = {
+          enabled: true,
+          plan,
+          todos,
+        };
+
+        log('GTD context resolved: plan=%s, todos=%o', plan.goal, todos?.items?.length ?? 0);
+      }
+    } catch (error) {
+      // Silently fail - GTD context is optional
+      log('Failed to resolve GTD context:', error);
+    }
   }
 
   // Create MessagesEngine with injected dependencies
@@ -291,7 +371,7 @@ export const contextEngineering = async ({
 
     // Tools configuration
     toolsConfig: {
-      getToolSystemRoles: (tools) => toolSelectors.enabledSystemRoles(tools)(getToolStoreState()),
+      manifests,
       tools,
     },
 
@@ -299,7 +379,7 @@ export const contextEngineering = async ({
     userMemory:
       enableUserMemories && userMemoryData
         ? {
-            enabled: true,
+            enabled: enableUserMemories,
             memories: userMemoryData,
           }
         : undefined,
@@ -311,8 +391,21 @@ export const contextEngineering = async ({
     ...(isAgentBuilderEnabled && { agentBuilderContext }),
     ...(isGroupAgentBuilderEnabled && { groupAgentBuilderContext }),
     ...(agentGroup && { agentGroup }),
+    ...(gtdConfig && { gtd: gtdConfig }),
   });
 
+  log('Input messages count: %d', messages.length);
+
   const result = await engine.process();
+
+  log('Output messages count: %d', result.messages.length);
+
+  if (messages.length > 0 && result.messages.length === 0) {
+    log(
+      'WARNING: Messages were reduced to 0! Input messages: %o',
+      messages.map((m) => ({ id: m.id, role: m.role })),
+    );
+  }
+
   return result.messages;
 };

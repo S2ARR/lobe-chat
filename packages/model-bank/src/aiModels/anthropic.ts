@@ -11,9 +11,43 @@ const anthropicChatModels: AIChatModelCard[] = [
     },
     contextWindowTokens: 200_000,
     description:
+      'Claude Opus 4.6 is Anthropic’s most intelligent model for building agents and coding.',
+    displayName: 'Claude Opus 4.6',
+    enabled: true,
+    id: 'claude-opus-4-6',
+    maxOutput: 128_000,
+    pricing: {
+      units: [
+        { name: 'textInput_cacheRead', rate: 0.5, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput', rate: 5, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 25, strategy: 'fixed', unit: 'millionTokens' },
+        {
+          lookup: { prices: { '1h': 10, '5m': 6.25 }, pricingParams: ['ttl'] },
+          name: 'textInput_cacheWrite',
+          strategy: 'lookup',
+          unit: 'millionTokens',
+        },
+      ],
+    },
+    releasedAt: '2026-02-05',
+    settings: {
+      extendParams: ['disableContextCaching', 'enableAdaptiveThinking', 'effort'],
+      searchImpl: 'params',
+    },
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+      search: true,
+      structuredOutput: true,
+      vision: true,
+    },
+    contextWindowTokens: 200_000,
+    description:
       'Claude Opus 4.5 is Anthropic’s flagship model, combining top-tier intelligence with scalable performance for complex, high-quality reasoning tasks.',
     displayName: 'Claude Opus 4.5',
-    enabled: true,
     id: 'claude-opus-4-5-20251101',
     maxOutput: 64_000,
     pricing: {
@@ -287,36 +321,6 @@ const anthropicChatModels: AIChatModelCard[] = [
       ],
     },
     releasedAt: '2024-03-07',
-    settings: {
-      extendParams: ['disableContextCaching'],
-    },
-    type: 'chat',
-  },
-  {
-    abilities: {
-      functionCall: true,
-      vision: true,
-    },
-    contextWindowTokens: 200_000,
-    description:
-      'Claude 3 Opus is Anthropic’s most powerful model for highly complex tasks, excelling in performance, intelligence, fluency, and comprehension.',
-    displayName: 'Claude 3 Opus',
-    id: 'claude-3-opus-20240229',
-    maxOutput: 4096,
-    pricing: {
-      units: [
-        { name: 'textInput_cacheRead', rate: 1.5, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textInput', rate: 15, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textOutput', rate: 75, strategy: 'fixed', unit: 'millionTokens' },
-        {
-          lookup: { prices: { '1h': 30, '5m': 18.75 }, pricingParams: ['ttl'] },
-          name: 'textInput_cacheWrite',
-          strategy: 'lookup',
-          unit: 'millionTokens',
-        },
-      ],
-    },
-    releasedAt: '2024-02-29',
     settings: {
       extendParams: ['disableContextCaching'],
     },

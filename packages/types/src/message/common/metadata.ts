@@ -1,6 +1,8 @@
 /* eslint-disable sort-keys-fix/sort-keys-fix , typescript-sort-keys/interface */
 import { z } from 'zod';
 
+import { PageSelection, PageSelectionSchema } from './pageSelection';
+
 export interface ModelTokensUsage {
   // Input tokens breakdown
   /**
@@ -80,6 +82,7 @@ export const MessageMetadataSchema = ModelUsageSchema.merge(ModelPerformanceSche
   inspectExpanded: z.boolean().optional(),
   isMultimodal: z.boolean().optional(),
   isSupervisor: z.boolean().optional(),
+  pageSelections: z.array(PageSelectionSchema).optional(),
 });
 
 export interface ModelUsage extends ModelTokensUsage {
@@ -146,4 +149,10 @@ export interface MessageMetadata extends ModelUsage, ModelPerformance {
    * Thread's sourceMessageId links back to this message for status tracking
    */
   instruction?: string;
+  taskTitle?: string;
+  /**
+   * Page selections attached to user message
+   * Used for Ask AI functionality to persist selection context
+   */
+  pageSelections?: PageSelection[];
 }

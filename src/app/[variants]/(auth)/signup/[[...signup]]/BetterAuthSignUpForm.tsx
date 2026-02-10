@@ -3,8 +3,8 @@
 import { Button, Icon, Text } from '@lobehub/ui';
 import { Form, Input } from 'antd';
 import { Lock, Mail } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import Link from '@/libs/next/Link';
+import { useSearchParams } from '@/libs/next/navigation';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -13,7 +13,7 @@ import { type SignUpFormValues, useSignUp } from './useSignUp';
 
 const BetterAuthSignUpForm = () => {
   const [form] = Form.useForm<SignUpFormValues>();
-  const { loading, onSubmit } = useSignUp();
+  const { loading, onSubmit, businessElement } = useSignUp();
 
   const { t } = useTranslation('auth');
   const searchParams = useSearchParams();
@@ -87,6 +87,37 @@ const BetterAuthSignUpForm = () => {
             size="large"
           />
         </Form.Item>
+        <Form.Item
+          dependencies={['password']}
+          name="confirmPassword"
+          rules={[
+            { message: t('betterAuth.errors.confirmPasswordRequired'), required: true },
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value || getFieldValue('password') === value) {
+                  return Promise.resolve();
+                }
+                return Promise.reject(new Error(t('betterAuth.errors.passwordMismatch')));
+              },
+            }),
+          ]}
+        >
+          <Input.Password
+            placeholder={t('betterAuth.signup.confirmPasswordPlaceholder')}
+            prefix={
+              <Icon
+                icon={Lock}
+                style={{
+                  marginInline: 6,
+                }}
+              />
+            }
+            size="large"
+          />
+        </Form.Item>
+
+        {businessElement}
+
         <Form.Item>
           <Button block htmlType="submit" loading={loading} size="large" type="primary">
             {t('betterAuth.signup.submit')}

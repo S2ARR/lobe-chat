@@ -12,7 +12,15 @@ interface BaseNode {
   /** Unique identifier for this node */
   id: string;
   /** Type discriminator */
-  type: 'message' | 'assistantGroup' | 'compare' | 'branch' | 'agentCouncil';
+  type:
+    | 'message'
+    | 'assistantGroup'
+    | 'compare'
+    | 'branch'
+    | 'agentCouncil'
+    | 'tasks'
+    | 'compressedGroup'
+    | 'compareGroup';
 }
 
 /**
@@ -72,6 +80,66 @@ export interface AgentCouncilNode extends BaseNode {
 }
 
 /**
+ * Tasks node - aggregates multiple async task messages with the same parentId
+ * Created when multiple role='task' messages share the same parent (typically a tool message)
+ */
+export interface TasksNode extends BaseNode {
+  /** Child task message nodes */
+  children: ContextNode[];
+  /** The parent message ID that triggered the tasks (typically a tool message) */
+  messageId: string;
+  type: 'tasks';
+}
+
+/**
+ * Pinned message within a compression group
+ */
+export interface PinnedMessage {
+  content: string | null;
+  createdAt: Date | string;
+  id: string;
+  model: string | null;
+  provider: string | null;
+  role: string;
+}
+
+/**
+ * Compressed Group node - represents compressed/summarized messages
+ * Messages marked as compressed are hidden, and a summary is shown instead.
+ * Pinned messages (favorite=true) within the compression group are preserved.
+ */
+export interface CompressedGroupNode extends BaseNode {
+  /** Summary content of the compressed messages */
+  content: string | null;
+  /** Messages marked as favorite/pinned within this compression group */
+  pinnedMessages: PinnedMessage[];
+  type: 'compressedGroup';
+}
+
+/**
+ * Child message within a compare group (parallel responses)
+ */
+export interface CompareGroupChild {
+  content: string | null;
+  createdAt: Date | string;
+  id: string;
+  model: string | null;
+  provider: string | null;
+  role: string;
+}
+
+/**
+ * Compare Group node - represents parallel model responses
+ * Multiple models respond to the same user message in parallel.
+ * Different from CompareNode which is built from metadata.compare flag.
+ */
+export interface CompareGroupNode extends BaseNode {
+  /** Parallel responses from different models */
+  children: CompareGroupChild[];
+  type: 'compareGroup';
+}
+
+/**
  * Union type of all display nodes
  */
 export type ContextNode =
@@ -79,4 +147,7 @@ export type ContextNode =
   | AssistantGroupNode
   | CompareNode
   | BranchNode
-  | AgentCouncilNode;
+  | AgentCouncilNode
+  | TasksNode
+  | CompressedGroupNode
+  | CompareGroupNode;

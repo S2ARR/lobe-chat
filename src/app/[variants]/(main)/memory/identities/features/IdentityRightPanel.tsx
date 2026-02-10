@@ -39,9 +39,9 @@ const IdentityRightPanel = memo(() => {
           }}
           weight={'bold'}
         >
-          {identity.role || identity.relationship || 'Identity'}
+          {identity.title}
         </Text>
-        <Time updatedAt={identity.updatedAt || identity.createdAt} />
+        <Time capturedAt={identity.capturedAt || identity.updatedAt || identity.createdAt} />
         {identity.description && <HighlightedContent>{identity.description}</HighlightedContent>}
         <HashTags hashTags={identity.tags} />
       </>

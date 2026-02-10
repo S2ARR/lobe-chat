@@ -5,7 +5,9 @@ import assistantChainWithFollowup from './assistant-chain-with-followup.json';
 import { assistantGroup } from './assistantGroup';
 import { branch } from './branch';
 import { compare } from './compare';
+import { compression } from './compression';
 import linearConversation from './linear-conversation.json';
+import { tasks } from './tasks';
 
 export const inputs = {
   agentCouncil,
@@ -14,5 +16,7 @@ export const inputs = {
   assistantGroup,
   branch,
   compare,
+  compression,
   linearConversation: linearConversation as Message[],
+  tasks,
 };

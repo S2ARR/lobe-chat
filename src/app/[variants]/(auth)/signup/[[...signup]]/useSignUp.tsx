@@ -1,29 +1,47 @@
-import { useRouter, useSearchParams } from 'next/navigation';
+import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
+import { form } from 'motion/react-m';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import {
+  BusinessSignupFomData,
+  useBusinessSignup,
+} from '@/business/client/hooks/useBusinessSignup';
 import { message } from '@/components/AntdStaticMethods';
-import { authEnv } from '@/envs/auth';
 import { signUp } from '@/libs/better-auth/auth-client';
+import { useRouter, useSearchParams } from '@/libs/next/navigation';
+import { useServerConfigStore } from '@/store/serverConfig';
+import { serverConfigSelectors } from '@/store/serverConfig/selectors';
 
-export interface SignUpFormValues {
-  email: string;
-  password: string;
-}
+import { BaseSignUpFormValues } from './types';
+
+export type SignUpFormValues = BaseSignUpFormValues & BusinessSignupFomData;
 
 export const useSignUp = () => {
+  const { t } = useTranslation(['auth', 'authError']);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const { getFetchOptions, preSocialSignupCheck, businessElement } = useBusinessSignup(form);
+  const enableEmailVerification = useServerConfigStore(
+    serverConfigSelectors.enableEmailVerification,
+  );
 
   const handleSignUp = async (values: SignUpFormValues) => {
     setLoading(true);
     try {
+      if (ENABLE_BUSINESS_FEATURES && !(await preSocialSignupCheck(values))) {
+        setLoading(false);
+        return;
+      }
+
       const callbackUrl = searchParams.get('callbackUrl') || '/';
       const username = values.email.split('@')[0];
 
       const { error } = await signUp.email({
         callbackURL: callbackUrl,
         email: values.email,
+        fetchOptions: await getFetchOptions(),
         name: username,
         password: values.password,
       });
@@ -34,20 +52,23 @@ export const useSignUp = () => {
           (error as any)?.details?.cause?.code === '23505';
 
         if (isEmailDuplicate) {
-          message.error('betterAuth.errors.emailExists');
+          message.error(t('betterAuth.errors.emailExists'));
           return;
         }
 
-        if (error.code === 'INVALID_EMAIL') {
-          message.error('betterAuth.errors.emailInvalid');
+        if (error.code === 'INVALID_EMAIL' || error.message === 'Invalid email') {
+          message.error(t('betterAuth.errors.emailInvalid'));
           return;
         }
 
-        message.error(error.message || 'betterAuth.signup.error');
+        const translated = error.code
+          ? t(`authError:codes.${error.code}`, { defaultValue: '' })
+          : '';
+        message.error(translated || error.message || t('betterAuth.signup.error'));
         return;
       }
 
-      if (authEnv.NEXT_PUBLIC_AUTH_EMAIL_VERIFICATION) {
+      if (enableEmailVerification) {
         router.push(
           `/verify-email?email=${encodeURIComponent(values.email)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
         );
@@ -55,11 +76,11 @@ export const useSignUp = () => {
         router.push(callbackUrl);
       }
     } catch {
-      message.error('betterAuth.signup.error');
+      message.error(t('betterAuth.signup.error'));
     } finally {
       setLoading(false);
     }
   };
 
-  return { loading, onSubmit: handleSignUp };
+  return { businessElement, loading, onSubmit: handleSignUp };
 };

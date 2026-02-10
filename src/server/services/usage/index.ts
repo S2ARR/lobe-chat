@@ -25,11 +25,11 @@ export class UsageRecordService {
    * @returns UsageRecordItem[]
    */
   findByMonth = async (mo?: string): Promise<UsageRecordItem[]> => {
-    // 设置 startAt 和 endAt
+    // Set startAt and endAt
     let startAt: string;
     let endAt: string;
-    if (mo) {
-      // mo 格式: "YYYY-MM"
+    if (mo && dayjs(mo, 'YYYY-MM', true).isValid()) {
+      // mo format: "YYYY-MM"
       startAt = dayjs(mo, 'YYYY-MM').startOf('month').format('YYYY-MM-DD');
       endAt = dayjs(mo, 'YYYY-MM').endOf('month').format('YYYY-MM-DD');
     } else {
@@ -86,18 +86,21 @@ export class UsageRecordService {
   };
 
   findAndGroupByDay = async (mo?: string): Promise<UsageLog[]> => {
-    // 设置 startAt 和 endAt
+    // Set startAt and endAt
     let startAt: string;
     let endAt: string;
-    if (mo) {
-      // mo 格式: "YYYY-MM"
+    let month: string;
+    if (mo && dayjs(mo, 'YYYY-MM', true).isValid()) {
+      // mo format: "YYYY-MM"
       startAt = dayjs(mo, 'YYYY-MM').startOf('month').format('YYYY-MM-DD');
       endAt = dayjs(mo, 'YYYY-MM').endOf('month').format('YYYY-MM-DD');
+      month = mo;
     } else {
       startAt = dayjs().startOf('month').format('YYYY-MM-DD');
       endAt = dayjs().endOf('month').format('YYYY-MM-DD');
+      month = dayjs().format('YYYY-MM');
     }
-    const spends = await this.findByMonth(mo);
+    const spends = await this.findByMonth(month);
     // Clustering by time
     let usages = new Map<string, { date: Date; logs: UsageRecordItem[] }>();
     spends.forEach((spend) => {

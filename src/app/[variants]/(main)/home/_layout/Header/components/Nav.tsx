@@ -1,17 +1,20 @@
 'use client';
 
 import { Flexbox } from '@lobehub/ui';
-import { FilePenIcon, HomeIcon, ImageIcon, SearchIcon, ShapesIcon } from 'lucide-react';
+import { HomeIcon, SearchIcon } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { getRouteById } from '@/config/routes';
 import { useActiveTabKey } from '@/hooks/useActiveTabKey';
 import { useGlobalStore } from '@/store/global';
 import { SidebarTabKey } from '@/store/global/initialState';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 
-import NavItem, { type NavItemProps } from '../../../../../../../features/NavPanel/components/NavItem';
+import NavItem, {
+  type NavItemProps,
+} from '../../../../../../../features/NavPanel/components/NavItem';
 
 interface Item {
   hidden?: boolean | undefined;
@@ -46,22 +49,21 @@ const Nav = memo(() => {
         url: '/',
       },
       {
-        hidden: !showAiImage,
-        icon: FilePenIcon,
+        icon: getRouteById('page')!.icon,
         key: SidebarTabKey.Pages,
         title: t('tab.pages'),
         url: '/page',
       },
       {
         hidden: !showAiImage,
-        icon: ImageIcon,
+        icon: getRouteById('image')!.icon,
         key: SidebarTabKey.Image,
         title: t('tab.aiImage'),
         url: '/image',
       },
       {
         hidden: !showMarket,
-        icon: ShapesIcon,
+        icon: getRouteById('community')!.icon,
         key: SidebarTabKey.Community,
         title: t('tab.community'),
         url: '/community',

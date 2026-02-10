@@ -8,7 +8,7 @@ import { contextEngineering } from './contextEngineering';
 import * as memoryManager from './memoryManager';
 
 // Mock VARIABLE_GENERATORS
-vi.mock('@/utils/client/parserPlaceholder', () => ({
+vi.mock('@/helpers/parserPlaceholder', () => ({
   VARIABLE_GENERATORS: {
     date: () => '2023-12-25',
     time: () => '14:30:45',
@@ -262,7 +262,6 @@ describe('contextEngineering', () => {
         content: 'Continue our discussion',
         createdAt: Date.now(),
         id: 'test-history',
-        meta: {},
         updatedAt: Date.now(),
       },
     ];
@@ -292,7 +291,6 @@ describe('contextEngineering', () => {
           imageList: [{ id: 'img1', url: 'http://example.com/image.png', alt: 'test.png' }],
           createdAt: Date.now(),
           id: 'test-id',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -319,7 +317,6 @@ describe('contextEngineering', () => {
           imageList: [{ id: 'img1', url: 'http://example.com/image.png', alt: 'test.png' }],
           createdAt: Date.now(),
           id: 'test-id-2',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -354,7 +351,6 @@ describe('contextEngineering', () => {
         ],
         createdAt: Date.now(),
         id: 'test-id-3',
-        meta: {},
         updatedAt: Date.now(),
       },
     ];
@@ -377,7 +373,6 @@ describe('contextEngineering', () => {
           content: 'Hello {{username}}, today is {{date}} and the time is {{time}}',
           createdAt: Date.now(),
           id: 'test-placeholder-1',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -385,7 +380,6 @@ describe('contextEngineering', () => {
           content: 'Hi there! Your random number is {{random}}',
           createdAt: Date.now(),
           id: 'test-placeholder-2',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -418,7 +412,6 @@ describe('contextEngineering', () => {
           ],
           createdAt: Date.now(),
           id: 'test-placeholder-array',
-          meta: {},
           updatedAt: Date.now(),
         },
       ] as any;
@@ -443,13 +436,20 @@ describe('contextEngineering', () => {
             'Memory load: available={{memory_available}}, total contexts={{memory_contexts_count}}\n{{memory_summary}}',
           createdAt: Date.now(),
           id: 'memory-placeholder-test',
-          meta: {},
+          updatedAt: Date.now(),
+        },
+        {
+          role: 'user',
+          content: 'Hello',
+          createdAt: Date.now(),
+          id: 'memory-placeholder-user',
           updatedAt: Date.now(),
         },
       ];
 
       // Mock topic memories and global identities separately
-      vi.spyOn(memoryManager, 'resolveTopicMemories').mockResolvedValue({
+      vi.spyOn(memoryManager, 'resolveTopicMemories').mockReturnValue({
+        activities: [],
         contexts: [
           {
             accessedAt: new Date('2024-01-01T00:00:00.000Z'),
@@ -481,19 +481,22 @@ describe('contextEngineering', () => {
         provider: 'openai',
       });
 
+      // Keep the original system message as-is
       expect(result[0].role).toBe('system');
-      // Check the memory context is injected (memory_fetched_at is optional now)
-      expect(result[0].content).toContain('<user_memories');
-      expect(result[0].content).toContain('contexts="1"');
-      expect(result[0].content).toContain('experiences="0"');
-      expect(result[0].content).toContain('preferences="0"');
-      expect(result[0].content).toContain(
-        '<user_memories_context id="ctx-1"><context_title>LobeHub</context_title><context_description>Weekly syncs for LobeHub</context_description></user_memories_context>',
-      );
-      expect(result[0].content).toContain('<context_title>LobeHub</context_title>');
-      expect(result[1].content).toBe(
+      expect(result[0].content).toBe(
         'Memory load: available={{memory_available}}, total contexts={{memory_contexts_count}}\n{{memory_summary}}',
       );
+
+      // Memory context is injected as a consolidated user message before the first user message
+      // Note: meta/id fields are removed by the engine cleanup step, so assert via content.
+      const injection = result.find(
+        (m: any) => m.role === 'user' && String(m.content).includes('<user_memory>'),
+      );
+      expect(injection).toBeDefined();
+      expect(injection!.role).toBe('user');
+      expect(injection!.content).toContain('<user_memory>');
+      expect(injection!.content).toContain('<contexts count="1">');
+      expect(injection!.content).toContain('<context id="ctx-1" title="LobeHub">');
     });
 
     it('should handle missing placeholder variables gracefully', async () => {
@@ -503,7 +506,6 @@ describe('contextEngineering', () => {
           content: 'Hello {{username}}, missing: {{missing_var}}',
           createdAt: Date.now(),
           id: 'test-placeholder-missing',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -524,7 +526,6 @@ describe('contextEngineering', () => {
           content: 'Hello there, no variables here',
           createdAt: Date.now(),
           id: 'test-no-placeholders',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -555,7 +556,6 @@ describe('contextEngineering', () => {
           ],
           createdAt: Date.now(),
           id: 'test-combined',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -584,14 +584,13 @@ describe('contextEngineering', () => {
   });
 
   describe('Message preprocessing processors', () => {
-    it('should truncate message history when enabled', async () => {
+    it('should keep all messages (no history truncation)', async () => {
       const messages: UIChatMessage[] = [
         {
           role: 'user',
           content: 'Message 1',
           createdAt: Date.now(),
           id: 'test-1',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -599,7 +598,6 @@ describe('contextEngineering', () => {
           content: 'Response 1',
           createdAt: Date.now(),
           id: 'test-2',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -607,7 +605,6 @@ describe('contextEngineering', () => {
           content: 'Message 2',
           createdAt: Date.now(),
           id: 'test-3',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -615,7 +612,6 @@ describe('contextEngineering', () => {
           content: 'Response 2',
           createdAt: Date.now(),
           id: 'test-4',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -623,7 +619,6 @@ describe('contextEngineering', () => {
           content: 'Latest message',
           createdAt: Date.now(),
           id: 'test-5',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -632,13 +627,12 @@ describe('contextEngineering', () => {
         messages,
         model: 'gpt-4',
         provider: 'openai',
-        enableHistoryCount: true,
-        historyCount: 4, // Should keep last 2 messages
       });
 
-      // Should only keep the last 2 messages
-      expect(result).toHaveLength(4);
+      // Should keep all messages
+      expect(result).toHaveLength(5);
       expect(result).toEqual([
+        { content: 'Message 1', role: 'user' },
         { content: 'Response 1', role: 'assistant' },
         { content: 'Message 2', role: 'user' },
         { content: 'Response 2', role: 'assistant' },
@@ -653,7 +647,6 @@ describe('contextEngineering', () => {
           content: 'Original user input',
           createdAt: Date.now(),
           id: 'test-template',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -661,7 +654,6 @@ describe('contextEngineering', () => {
           content: 'Assistant response',
           createdAt: Date.now(),
           id: 'test-assistant',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -694,7 +686,6 @@ describe('contextEngineering', () => {
           content: 'User message',
           createdAt: Date.now(),
           id: 'test-user',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -713,14 +704,13 @@ describe('contextEngineering', () => {
       ]);
     });
 
-    it('should combine all preprocessing steps correctly', async () => {
+    it('should combine system role and input template correctly', async () => {
       const messages: UIChatMessage[] = [
         {
           role: 'user',
           content: 'Old message 1',
           createdAt: Date.now(),
           id: 'test-old-1',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -728,7 +718,6 @@ describe('contextEngineering', () => {
           content: 'Old response',
           createdAt: Date.now(),
           id: 'test-old-2',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -736,7 +725,6 @@ describe('contextEngineering', () => {
           content: 'Recent input with {{username}}',
           createdAt: Date.now(),
           id: 'test-recent',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -747,15 +735,17 @@ describe('contextEngineering', () => {
         provider: 'openai',
         systemRole: 'System instructions.',
         inputTemplate: 'Processed: {{text}}',
-        enableHistoryCount: true,
-        historyCount: 2, // Should keep last 1 message
       });
 
-      // System role should be first
+      // System role should be first, followed by all messages with input template applied to user messages
       expect(result).toEqual([
         {
           content: 'System instructions.',
           role: 'system',
+        },
+        {
+          content: 'Processed: Old message 1',
+          role: 'user',
         },
         {
           role: 'assistant',
@@ -775,7 +765,6 @@ describe('contextEngineering', () => {
           content: 'Simple message',
           createdAt: Date.now(),
           id: 'test-simple',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -795,14 +784,13 @@ describe('contextEngineering', () => {
       ]);
     });
 
-    it('should handle history truncation with system role injection correctly', async () => {
+    it('should handle system role injection with all messages (no history truncation)', async () => {
       const messages: UIChatMessage[] = [
         {
           role: 'user',
           content: 'Message 1',
           createdAt: Date.now(),
           id: 'test-1',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -810,7 +798,6 @@ describe('contextEngineering', () => {
           content: 'Message 2',
           createdAt: Date.now(),
           id: 'test-2',
-          meta: {},
           updatedAt: Date.now(),
         },
         {
@@ -818,7 +805,6 @@ describe('contextEngineering', () => {
           content: 'Message 3',
           createdAt: Date.now(),
           id: 'test-3',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];
@@ -828,18 +814,24 @@ describe('contextEngineering', () => {
         model: 'gpt-4',
         provider: 'openai',
         systemRole: 'System role here.',
-        enableHistoryCount: true,
-        historyCount: 1, // Should keep only 1 message
       });
 
-      // Should have system role + 1 truncated message
+      // Should have system role + all messages
       expect(result).toEqual([
         {
           content: 'System role here.',
           role: 'system',
         },
         {
-          content: 'Message 3', // Only the last message should remain
+          content: 'Message 1',
+          role: 'user',
+        },
+        {
+          content: 'Message 2',
+          role: 'user',
+        },
+        {
+          content: 'Message 3',
           role: 'user',
         },
       ]);
@@ -852,7 +844,6 @@ describe('contextEngineering', () => {
           content: 'User message',
           createdAt: Date.now(),
           id: 'test-error',
-          meta: {},
           updatedAt: Date.now(),
         },
       ];

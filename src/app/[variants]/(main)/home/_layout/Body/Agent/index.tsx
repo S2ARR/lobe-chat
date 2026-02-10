@@ -1,10 +1,10 @@
 'use client';
 
-import { AccordionItem, ActionIcon, Dropdown, Flexbox, Text } from '@lobehub/ui';
-import { Loader2Icon } from 'lucide-react';
+import { AccordionItem, ContextMenuTrigger, Flexbox, Text } from '@lobehub/ui';
 import React, { Suspense, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { useFetchAgentList } from '@/hooks/useFetchAgentList';
 
 import SkeletonList from '../../../../../../../features/NavPanel/components/SkeletonList';
@@ -22,70 +22,16 @@ const Agent = memo<AgentProps>(({ itemKey }) => {
   const { t } = useTranslation('common');
   const { isRevalidating } = useFetchAgentList();
 
-  const {
-    openGroupWizardModal,
-    closeGroupWizardModal,
-    openConfigGroupModal,
-    setGroupWizardLoading,
-  } = useAgentModal();
+  const { openConfigGroupModal } = useAgentModal();
 
   // Create menu items
-  const { createGroupFromTemplate, createGroupWithMembers, isLoading } = useCreateMenuItems();
-
-  // Adapter functions to match GroupWizard interface
-  const handleGroupWizardCreateCustom = useCallback(
-    async (
-      selectedAgents: string[],
-      hostConfig?: { model?: string; provider?: string },
-      enableSupervisor?: boolean,
-    ) => {
-      await createGroupWithMembers(selectedAgents, undefined, hostConfig, enableSupervisor);
-    },
-    [createGroupWithMembers],
-  );
-
-  const handleGroupWizardCreateFromTemplate = useCallback(
-    async (
-      templateId: string,
-      hostConfig?: { model?: string; provider?: string },
-      enableSupervisor?: boolean,
-      selectedMemberTitles?: string[],
-    ) => {
-      setGroupWizardLoading(true);
-      try {
-        await createGroupFromTemplate(
-          templateId,
-          hostConfig,
-          enableSupervisor,
-          selectedMemberTitles,
-        );
-        closeGroupWizardModal();
-      } finally {
-        setGroupWizardLoading(false);
-      }
-    },
-    [createGroupFromTemplate, setGroupWizardLoading, closeGroupWizardModal],
-  );
-
-  const handleOpenGroupWizard = useCallback(() => {
-    openGroupWizardModal({
-      onCancel: closeGroupWizardModal,
-      onCreateCustom: handleGroupWizardCreateCustom,
-      onCreateFromTemplate: handleGroupWizardCreateFromTemplate,
-    });
-  }, [
-    openGroupWizardModal,
-    closeGroupWizardModal,
-    handleGroupWizardCreateFromTemplate,
-    handleGroupWizardCreateCustom,
-  ]);
+  const { isLoading } = useCreateMenuItems();
 
   const handleOpenConfigGroupModal = useCallback(() => {
     openConfigGroupModal();
   }, [openConfigGroupModal]);
 
   const dropdownMenu = useAgentActionsDropdownMenu({
-    handleOpenGroupWizard,
     openConfigGroupModal: handleOpenConfigGroupModal,
   });
 
@@ -93,14 +39,7 @@ const Agent = memo<AgentProps>(({ itemKey }) => {
     <AccordionItem
       action={<Actions dropdownMenu={dropdownMenu} isLoading={isLoading} />}
       headerWrapper={(header) => (
-        <Dropdown
-          menu={{
-            items: dropdownMenu,
-          }}
-          trigger={['contextMenu']}
-        >
-          {header}
-        </Dropdown>
+        <ContextMenuTrigger items={dropdownMenu}>{header}</ContextMenuTrigger>
       )}
       itemKey={itemKey}
       paddingBlock={4}
@@ -110,7 +49,7 @@ const Agent = memo<AgentProps>(({ itemKey }) => {
           <Text ellipsis fontSize={12} type={'secondary'} weight={500}>
             {t('navPanel.agent')}
           </Text>
-          {isRevalidating && <ActionIcon icon={Loader2Icon} loading size={'small'} />}
+          {isRevalidating && <NeuralNetworkLoading size={14} />}
         </Flexbox>
       }
     >

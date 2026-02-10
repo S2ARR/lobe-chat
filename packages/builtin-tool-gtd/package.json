@@ -12,10 +12,10 @@
     "@lobechat/prompts": "workspace:*"
   },
   "devDependencies": {
-    "@lobechat/types": "workspace:*",
-    "@lobehub/ui": "^4.3.1"
+    "@lobechat/types": "workspace:*"
   },
   "peerDependencies": {
+    "@lobehub/editor": "^3",
     "@lobehub/ui": "^4",
     "antd": "^6",
     "antd-style": "*",

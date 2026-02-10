@@ -11,9 +11,14 @@ on:
       - main
       - next
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     name: Release
+    if: github.repository == 'lobehub/lobehub'
     runs-on: ubuntu-latest
 
     services:
@@ -28,7 +33,7 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_TOKEN }}
 
@@ -41,7 +46,7 @@ jobs:
       - name: Install bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.23
+          bun-version: latest
 
       - name: Install deps
         run: bun i

@@ -51,9 +51,29 @@ const infiniaiChatModels: AIChatModelCard[] = [
     },
     contextWindowTokens: 200_000,
     description:
-      'MiniMax-M2 is a MoE language model optimized for coding and agent workflows, with about 230B total parameters and around 10B active parameters. It strengthens developer scenarios such as multi-file editing, code-run-fix loops, and test verification/repair, while delivering stable, efficient performance in real environments like terminals, IDEs, and CI.',
-    displayName: 'MiniMax M2',
+      'MiniMax-M2.1 is the latest version of the MiniMax series, optimized for multilingual programming and real-world complex tasks. As an AI-native model, MiniMax-M2.1 achieves significant improvements in model performance, agent framework support, and multi-scenario adaptation, aiming to help enterprises and individuals find AI-native work and lifestyle more quickly.',
+    displayName: 'MiniMax M2.1',
     enabled: true,
+    id: 'minimax-m2.1',
+    maxOutput: 200_000,
+    pricing: {
+      currency: 'CNY',
+      units: [
+        { name: 'textInput', rate: 2.1, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 8.4, strategy: 'fixed', unit: 'millionTokens' },
+      ],
+    },
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+    },
+    contextWindowTokens: 200_000,
+    description:
+      'MiniMax-M2 is a Mixture of Experts (MoE) language model optimized for coding and agent workflows, with approximately 230B total parameters and approximately 10B active parameters. While maintaining strong general intelligence, it is deeply enhanced for developer scenarios such as multi-file editing, code-run-fix loops, and test validation fixes, demonstrating stable and efficient performance in real environments like terminals, IDEs, and CI.',
+    displayName: 'MiniMax M2',
     id: 'minimax-m2',
     maxOutput: 200_000,
     pricing: {
@@ -71,16 +91,17 @@ const infiniaiChatModels: AIChatModelCard[] = [
       reasoning: true,
     },
     contextWindowTokens: 131_072,
-    description: 'GLM-4.6 is Zhipu AI’s latest LLM, with stronger reasoning and generation.',
-    displayName: 'GLM-4.6',
+    description:
+      'GLM-4.7 is the latest large language model launched by Zhipu AI, with enhanced reasoning and generation capabilities.',
+    displayName: 'GLM-4.7',
     enabled: true,
-    id: 'glm-4.6',
+    id: 'glm-4.7',
     maxOutput: 4096,
     pricing: {
       currency: 'CNY',
       units: [
-        { name: 'textInput', rate: 4, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textOutput', rate: 16, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput', rate: 3, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 14, strategy: 'fixed', unit: 'millionTokens' },
       ],
     },
     settings: {
@@ -94,9 +115,32 @@ const infiniaiChatModels: AIChatModelCard[] = [
       reasoning: true,
     },
     contextWindowTokens: 131_072,
-    description: 'DeepSeek-V3.2-Exp is an experimental DeepSeek LLM with stronger reasoning and generation.',
+    description:
+      'GLM-4.6 is the latest large language model launched by Zhipu AI, with enhanced reasoning and generation capabilities.',
+    displayName: 'GLM-4.6',
+    id: 'glm-4.6',
+    maxOutput: 4096,
+    pricing: {
+      currency: 'CNY',
+      units: [
+        { name: 'textInput', rate: 3, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 14, strategy: 'fixed', unit: 'millionTokens' },
+      ],
+    },
+    settings: {
+      extendParams: ['enableReasoning'],
+    },
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+    },
+    contextWindowTokens: 131_072,
+    description:
+      'DeepSeek-V3.2-Exp is an experimental DeepSeek LLM with stronger reasoning and generation.',
     displayName: 'DeepSeek V3.2 Exp',
-    enabled: true,
     id: 'deepseek-v3.2-exp',
     maxOutput: 65_536,
     pricing: {
@@ -260,7 +304,8 @@ const infiniaiChatModels: AIChatModelCard[] = [
       vision: true,
     },
     contextWindowTokens: 131_072,
-    description: 'GLM-4.5V is a multimodal model from Zhipu AI for vision understanding and reasoning.',
+    description:
+      'GLM-4.5V is a multimodal model from Zhipu AI for vision understanding and reasoning.',
     displayName: 'GLM-4.5V',
     id: 'glm-4.5v',
     maxOutput: 4096,
@@ -359,8 +404,7 @@ const infiniaiChatModels: AIChatModelCard[] = [
       functionCall: true,
     },
     contextWindowTokens: 131_072,
-    description:
-      'Kimi K2 Instruct is a Moonshot AI LLM with ultra-long context handling.',
+    description: 'Kimi K2 Instruct is a Moonshot AI LLM with ultra-long context handling.',
     displayName: 'Kimi K2 Instruct',
     id: 'kimi-k2-instruct',
     maxOutput: 32_768,

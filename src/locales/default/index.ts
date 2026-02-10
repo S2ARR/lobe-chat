@@ -1,13 +1,12 @@
-import { businessLocales } from '@/business/locales/index';
-
+import agentGroup from './agentGroup';
 import auth from './auth';
 import authError from './authError';
 import changelog from './changelog';
 import chat from './chat';
-import clerk from './clerk';
 import color from './color';
 import common from './common';
 import components from './components';
+import desktopOnboarding from './desktop-onboarding';
 import discover from './discover';
 import editor from './editor';
 import electron from './electron';
@@ -31,6 +30,7 @@ import portal from './portal';
 import providers from './providers';
 import ragEval from './ragEval';
 import setting from './setting';
+import spend from './spend';
 import subscription from './subscription';
 import thread from './thread';
 import tool from './tool';
@@ -39,14 +39,15 @@ import ui from './ui';
 import welcome from './welcome';
 
 const resources = {
+  agentGroup,
   auth,
   authError,
   changelog,
   chat,
-  clerk,
   color,
   common,
   components,
+  'desktop-onboarding': desktopOnboarding,
   discover,
   editor,
   electron,
@@ -54,10 +55,11 @@ const resources = {
   file,
   home,
   hotkey,
+
   image,
   knowledgeBase,
-  labs,
 
+  labs,
   marketAuth,
   memory,
   metadata,
@@ -71,14 +73,13 @@ const resources = {
   providers,
   ragEval,
   setting,
+  spend,
   subscription,
   thread,
   tool,
   topic,
   ui,
   welcome,
-
-  ...businessLocales,
 } as const;
 
 export default resources;

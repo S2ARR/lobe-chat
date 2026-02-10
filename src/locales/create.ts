@@ -8,6 +8,9 @@ import { DEFAULT_LANG } from '@/const/locale';
 import { getDebugConfig } from '@/envs/debug';
 import { normalizeLocale } from '@/locales/resources';
 import { isOnServerSide } from '@/utils/env';
+import { unwrapESMModule } from '@/utils/esm/unwrapESMModule';
+
+import { loadI18nNamespaceModule } from '../utils/i18n/loadI18nNamespaceModule';
 
 const { I18N_DEBUG, I18N_DEBUG_BROWSER, I18N_DEBUG_SERVER } = getDebugConfig();
 const debugMode = (I18N_DEBUG ?? isOnServerSide) ? I18N_DEBUG_SERVER : I18N_DEBUG_BROWSER;
@@ -18,15 +21,14 @@ export const createI18nNext = (lang?: string) => {
     .use(LanguageDetector)
     .use(
       resourcesToBackend(async (lng: string, ns: string) => {
-        if (ns === 'models' || ns === 'providers') {
-          return import(`@/../locales/${normalizeLocale(lng)}/${ns}.json`);
-        }
-
-        if (lng === DEFAULT_LANG) {
-          return import(`./default/${ns}`);
-        }
-
-        return import(`@/../locales/${normalizeLocale(lng)}/${ns}.json`);
+        return unwrapESMModule(
+          await loadI18nNamespaceModule({
+            defaultLang: DEFAULT_LANG,
+            lng,
+            normalizeLocale,
+            ns,
+          }),
+        );
       }),
     );
   // Dynamically set HTML direction on language change
@@ -43,21 +45,6 @@ export const createI18nNext = (lang?: string) => {
       return instance.init({
         debug: debugMode,
         defaultNS: ['error', 'common', 'chat'],
-
-        // detection: {
-        //   caches: ['cookie'],
-        //   cookieMinutes: 60 * 24 * COOKIE_CACHE_DAYS,
-        //   /**
-        //      Set `sameSite` to `lax` so that the i18n cookie can be passed to the
-        //      server side when returning from the OAuth authorization website.
-        //      ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
-        //      discussion: https://github.com/lobehub/lobe-chat/pull/1474
-        //   */
-        //   cookieOptions: {
-        //     sameSite: 'lax',
-        //   },
-        //   lookupCookie: LOBE_LOCALE_COOKIE,
-        // },
         fallbackLng: DEFAULT_LANG,
 
         initAsync,
@@ -65,8 +52,6 @@ export const createI18nNext = (lang?: string) => {
         interpolation: {
           escapeValue: false,
         },
-        // Use flat keys with dots (e.g. "notFound.title") instead of nested objects.
-        // This keeps both runtime lookup and TS key inference consistent.
         keySeparator: false,
 
         lng: lang,

@@ -89,7 +89,6 @@ const createMockExecGroupAgentResponse = (overrides = {}) => ({
       content: TEST_CONTENT.GROUP_MESSAGE,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      meta: {},
     },
     {
       id: TEST_IDS.ASSISTANT_MESSAGE_ID,
@@ -97,7 +96,6 @@ const createMockExecGroupAgentResponse = (overrides = {}) => ({
       content: '',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      meta: {},
     },
   ],
   topics: {
@@ -558,7 +556,10 @@ describe('agentGroup actions', () => {
           });
         });
 
-        expect(result.current.switchTopic).toHaveBeenCalledWith(TEST_IDS.TOPIC_ID, true);
+        expect(result.current.switchTopic).toHaveBeenCalledWith(TEST_IDS.TOPIC_ID, {
+          clearNewKey: true,
+          skipRefreshMessage: true,
+        });
       });
 
       it('should not switch topic when using existing topic', async () => {

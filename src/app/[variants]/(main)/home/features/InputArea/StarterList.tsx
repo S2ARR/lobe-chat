@@ -1,7 +1,8 @@
 import { BUILTIN_AGENT_SLUGS } from '@lobechat/builtin-agents';
 import { Button, type ButtonProps, Center, Tooltip } from '@lobehub/ui';
+import { GroupBotSquareIcon } from '@lobehub/ui/icons';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
-import { BotIcon, ImageIcon, MicroscopeIcon, PenLineIcon, UsersIcon } from 'lucide-react';
+import { BotIcon, FilePenIcon, ImageIcon } from 'lucide-react';
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -11,16 +12,18 @@ import { type StarterMode, useHomeStore } from '@/store/home';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   active: css`
-    border-color: ${cssVar.colorPrimary};
-    background: ${cssVar.colorPrimaryBg};
+    border-color: ${cssVar.colorFillSecondary} !important;
+    background: ${cssVar.colorBgElevated} !important;
   `,
   button: css`
     height: 40px;
-    background: ${cssVar.colorBgContainer};
+    border-color: ${cssVar.colorFillSecondary};
+    background: transparent;
+    box-shadow: none !important;
 
     &:hover {
-      border-color: ${cssVar.colorBorder};
-      background: ${cssVar.colorFillTertiary};
+      border-color: ${cssVar.colorFillSecondary} !important;
+      background: ${cssVar.colorBgElevated} !important;
     }
   `,
 }));
@@ -59,12 +62,12 @@ const StarterList = memo(() => {
         titleKey: 'starter.createAgent',
       },
       {
-        icon: UsersIcon,
+        icon: GroupBotSquareIcon,
         key: 'group',
         titleKey: 'starter.createGroup',
       },
       {
-        icon: PenLineIcon,
+        icon: FilePenIcon,
         key: 'write',
         titleKey: 'starter.write',
       },
@@ -73,12 +76,12 @@ const StarterList = memo(() => {
         key: 'image',
         titleKey: 'starter.image',
       },
-      {
-        disabled: true,
-        icon: MicroscopeIcon,
-        key: 'research',
-        titleKey: 'starter.deepResearch',
-      },
+      // {
+      //   disabled: true,
+      //   icon: MicroscopeIcon,
+      //   key: 'research',
+      //   titleKey: 'starter.deepResearch',
+      // },
     ],
     [],
   );
@@ -116,12 +119,13 @@ const StarterList = memo(() => {
             disabled={item.disabled}
             icon={item.icon}
             iconProps={{
-              color: inputActiveMode === item.key ? cssVar.colorPrimary : cssVar.colorTextSecondary,
+              color: inputActiveMode === item.key ? cssVar.colorText : cssVar.colorTextSecondary,
               size: 18,
             }}
             key={item.key}
             onClick={() => handleClick(item.key)}
             shape={'round'}
+            variant={'outlined'}
           >
             {t(item.titleKey)}
           </Button>

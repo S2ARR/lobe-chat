@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_CHAT_GROUP_CHAT_CONFIG } from '@/const/settings';
+import { mutate } from '@/libs/swr';
 import { chatGroupService } from '@/services/chatGroup';
 
 import { useAgentGroupStore } from '../store';
@@ -14,12 +15,9 @@ vi.mock('@/services/chatGroup', () => ({
   },
 }));
 
-vi.mock('swr', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...(actual as any),
-    mutate: vi.fn().mockResolvedValue(undefined),
-  };
+vi.mock('@/libs/swr', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/libs/swr')>();
+  return { ...actual, mutate: vi.fn().mockResolvedValue(undefined) };
 });
 
 // Helper to create mock AgentGroupDetail
@@ -70,7 +68,6 @@ describe('ChatGroupCurdSlice', () => {
     });
 
     it('should refresh group detail after update', async () => {
-      const { mutate } = await import('swr');
       vi.mocked(chatGroupService.updateGroup).mockResolvedValue({} as any);
 
       const { result } = renderHook(() => useAgentGroupStore());
@@ -90,13 +87,13 @@ describe('ChatGroupCurdSlice', () => {
       const { result } = renderHook(() => useAgentGroupStore());
 
       await act(async () => {
-        await result.current.updateGroupConfig({ enableSupervisor: false });
+        await result.current.updateGroupConfig({ allowDM: false });
       });
 
       expect(chatGroupService.updateGroup).toHaveBeenCalledWith('group-1', {
         config: expect.objectContaining({
           ...DEFAULT_CHAT_GROUP_CHAT_CONFIG,
-          enableSupervisor: false,
+          allowDM: false,
         }),
       });
     });
@@ -112,20 +109,19 @@ describe('ChatGroupCurdSlice', () => {
       const { result } = renderHook(() => useAgentGroupStore());
 
       await act(async () => {
-        await result.current.updateGroupConfig({ enableSupervisor: false });
+        await result.current.updateGroupConfig({ allowDM: false });
       });
 
       expect(chatGroupService.updateGroup).not.toHaveBeenCalled();
     });
 
     it('should refresh group detail after config update', async () => {
-      const { mutate } = await import('swr');
       vi.mocked(chatGroupService.updateGroup).mockResolvedValue({} as any);
 
       const { result } = renderHook(() => useAgentGroupStore());
 
       await act(async () => {
-        await result.current.updateGroupConfig({ scene: 'casual' });
+        await result.current.updateGroupConfig({ revealDM: true });
       });
 
       expect(mutate).toHaveBeenCalledWith(['fetchGroupDetail', 'group-1']);
@@ -166,7 +162,6 @@ describe('ChatGroupCurdSlice', () => {
     });
 
     it('should refresh group detail after meta update', async () => {
-      const { mutate } = await import('swr');
       vi.mocked(chatGroupService.updateGroup).mockResolvedValue({} as any);
 
       const { result } = renderHook(() => useAgentGroupStore());

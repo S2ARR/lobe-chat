@@ -5,12 +5,17 @@ import { createStaticStyles } from 'antd-style';
 import { memo } from 'react';
 
 import EditorCanvas from './EditorCanvas';
-import Title from './Title';
+import TodoList from './TodoList';
 
 const styles = createStaticStyles(({ css }) => ({
   content: css`
     overflow: auto;
     flex: 1;
+    padding-inline: 16px;
+  `,
+  todoContainer: css`
+    flex-shrink: 0;
+    padding-block-end: 12px;
     padding-inline: 12px;
   `,
 }));
@@ -19,8 +24,10 @@ const DocumentBody = memo(() => {
   return (
     <Flexbox flex={1} height={'100%'} style={{ overflow: 'hidden' }}>
       <div className={styles.content}>
-        <Title />
         <EditorCanvas />
+      </div>
+      <div className={styles.todoContainer}>
+        <TodoList />
       </div>
     </Flexbox>
   );

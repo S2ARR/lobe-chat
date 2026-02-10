@@ -3,6 +3,7 @@ import { BrainCircuitIcon } from 'lucide-react';
 import { type FC, memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import MemoryAnalysis from '@/app/[variants]/(main)/memory/features/MemoryAnalysis';
 import { SCROLL_PARENT_ID } from '@/app/[variants]/(main)/memory/features/TimeLineView/useScrollParent';
 import NavHeader from '@/features/NavHeader';
 import WideScreenContainer from '@/features/WideScreenContainer';
@@ -24,7 +25,8 @@ const ExperiencesArea = memo(() => {
   const [sortValueRaw, setSortValueRaw] = useQueryState('sort', { clearOnDefault: true });
 
   const searchValue = searchValueRaw || '';
-  const sortValue = (sortValueRaw as 'createdAt' | 'scoreConfidence') || 'createdAt';
+  const sortValue: 'capturedAt' | 'scoreConfidence' =
+    sortValueRaw === 'scoreConfidence' ? 'scoreConfidence' : 'capturedAt';
 
   const experiencesPage = useUserMemoryStore((s) => s.experiencesPage);
   const experiencesInit = useUserMemoryStore((s) => s.experiencesInit);
@@ -34,12 +36,12 @@ const ExperiencesArea = memo(() => {
   const resetExperiencesList = useUserMemoryStore((s) => s.resetExperiencesList);
 
   const sortOptions = [
-    { label: t('filter.sort.createdAt'), value: 'createdAt' },
+    { label: t('filter.sort.createdAt'), value: 'capturedAt' },
     { label: t('filter.sort.scoreConfidence'), value: 'scoreConfidence' },
   ];
 
-  // 转换 sort：createdAt 转为 undefined（后端默认）
-  const apiSort = sortValue === 'createdAt' ? undefined : (sortValue as 'scoreConfidence');
+  // 转换 sort：capturedAt 转为 undefined（后端默认）
+  const apiSort = sortValue === 'capturedAt' ? undefined : (sortValue as 'scoreConfidence');
 
   // 当搜索或排序变化时重置列表
   useEffect(() => {
@@ -84,6 +86,7 @@ const ExperiencesArea = memo(() => {
         }
         right={
           <>
+            <MemoryAnalysis iconOnly />
             <ViewModeSwitcher onChange={setViewMode} value={viewMode} />
             <WideScreenButton />
           </>

@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import { businessFileUploadCheck } from '@/business/server/lambda-routers/file';
 import { checkFileStorageUsage } from '@/business/server/trpc-middlewares/lambda';
 import { serverDBEnv } from '@/config/db';
 import { AsyncTaskModel } from '@/database/models/asyncTask';
@@ -8,11 +9,18 @@ import { ChunkModel } from '@/database/models/chunk';
 import { DocumentModel } from '@/database/models/document';
 import { FileModel } from '@/database/models/file';
 import { KnowledgeRepo } from '@/database/repositories/knowledge';
+import { appEnv } from '@/envs/app';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { FileService } from '@/server/services/file';
 import { AsyncTaskStatus, AsyncTaskType } from '@/types/asyncTask';
 import { type FileListItem, QueryFileListSchema, UploadFileSchema } from '@/types/files';
+
+/**
+ * Generate file proxy URL
+ * Returns a unified proxy URL format: ${APP_URL}/f/:id
+ */
+const getFileProxyUrl = (fileId: string): string => `${appEnv.APP_URL}/f/${fileId}`;
 
 const fileProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -57,6 +65,28 @@ export const fileRouter = router({
         }
       }
 
+      let actualSize = input.size;
+      try {
+        const { contentLength } = await ctx.fileService.getFileMetadata(input.url);
+        if (contentLength >= 1) {
+          actualSize = contentLength;
+        }
+      } catch {
+        // If metadata fetch fails, use original size from input
+      }
+
+      await businessFileUploadCheck({
+        actualSize,
+        clientIp: ctx.clientIp ?? undefined,
+        inputSize: input.size,
+        url: input.url,
+        userId: ctx.userId,
+      });
+
+      if (actualSize < 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'File size cannot be negative' });
+      }
+
       const { id } = await ctx.fileModel.create(
         {
           fileHash: input.hash,
@@ -65,14 +95,14 @@ export const fileRouter = router({
           metadata: input.metadata,
           name: input.name,
           parentId: resolvedParentId,
-          size: input.size,
+          size: actualSize,
           url: input.url,
         },
         // if the file is not exist in global file, create a new one
         !isExist,
       );
 
-      return { id, url: await ctx.fileService.getFullFileUrl(input.url) };
+      return { id, url: getFileProxyUrl(id) };
     }),
   findById: fileProcedure
     .input(
@@ -98,7 +128,7 @@ export const fileRouter = router({
         size: item.size,
         source: item.source,
         updatedAt: item.updatedAt,
-        url: await ctx.fileService.getFullFileUrl(item.url),
+        url: getFileProxyUrl(item.id),
         userId: item.userId,
       };
     }),
@@ -140,7 +170,7 @@ export const fileRouter = router({
         size: item.size,
         sourceType: 'file' as const,
         updatedAt: item.updatedAt,
-        url: await ctx.fileService.getFullFileUrl(item.url!),
+        url: getFileProxyUrl(item.id),
       };
     }),
 
@@ -178,7 +208,7 @@ export const fileRouter = router({
         embeddingStatus: embeddingTask?.status as AsyncTaskStatus,
         finishEmbedding: embeddingTask?.status === AsyncTaskStatus.Success,
         sourceType: 'file' as const,
-        url: await ctx.fileService.getFullFileUrl(item.url!),
+        url: getFileProxyUrl(item.id),
       } as FileListItem;
       resultFiles.push(fileItem);
     }
@@ -243,7 +273,7 @@ export const fileRouter = router({
           embeddingError: embeddingTask?.error ?? null,
           embeddingStatus: embeddingTask?.status as AsyncTaskStatus,
           finishEmbedding: embeddingTask?.status === AsyncTaskStatus.Success,
-          url: await ctx.fileService.getFullFileUrl(item.url!),
+          url: getFileProxyUrl(item.id),
         } as FileListItem);
       } else {
         // Document item - no chunk processing needed, includes editorData
@@ -319,7 +349,7 @@ export const fileRouter = router({
           embeddingStatus: embeddingTask?.status as AsyncTaskStatus,
           finishEmbedding: embeddingTask?.status === AsyncTaskStatus.Success,
           sourceType: 'file' as const,
-          url: await ctx.fileService.getFullFileUrl(item.url!),
+          url: getFileProxyUrl(item.id),
         } as FileListItem);
       }
 
@@ -346,7 +376,7 @@ export const fileRouter = router({
 
     if (!file) return;
 
-    // delele the file from remove from S3 if it is not used by other files
+    // delete the file from S3 if it is not used by other files
     await ctx.fileService.deleteFile(file.url!);
   }),
 

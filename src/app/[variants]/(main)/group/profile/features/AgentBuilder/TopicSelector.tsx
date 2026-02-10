@@ -1,12 +1,11 @@
-import { ActionIcon, Tag } from '@lobehub/ui';
-import { Dropdown } from 'antd';
-import type { ItemType } from 'antd/es/menu/interface';
+import { ActionIcon, DropdownMenu, type DropdownMenuCheckboxItem, Tag } from '@lobehub/ui';
 import { Clock3Icon, PlusIcon } from 'lucide-react';
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DESKTOP_HEADER_ICON_SIZE } from '@/const/layoutTokens';
 import NavHeader from '@/features/NavHeader';
+import { useQueryState } from '@/hooks/useQueryParam';
 import { useChatStore } from '@/store/chat';
 import { topicSelectors } from '@/store/chat/slices/topic/selectors';
 
@@ -20,11 +19,19 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
   // Fetch topics for the group agent builder
   useChatStore((s) => s.useFetchTopics)(true, { agentId });
 
-  const [activeTopicId, switchTopic, topics] = useChatStore((s) => [
-    s.activeTopicId,
-    s.switchTopic,
-    topicSelectors.getTopicsByAgentId(agentId)(s),
-  ]);
+  // Use activeTopicId from chatStore (synced from URL query 'bt' via ProfileHydration)
+  const activeTopicId = useChatStore((s) => s.activeTopicId);
+  const topics = useChatStore((s) => topicSelectors.getTopicsByAgentId(agentId)(s));
+
+  // Directly update URL query 'bt' to switch topic in profile page
+  const [, setBuilderTopicId] = useQueryState('bt');
+
+  const handleSwitchTopic = useCallback(
+    (topicId?: string) => {
+      setBuilderTopicId(topicId ?? null);
+    },
+    [setBuilderTopicId],
+  );
 
   // Find active topic from the agent's topics list directly
   const activeTopic = useMemo(
@@ -32,15 +39,23 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
     [topics, activeTopicId],
   );
 
-  const items = useMemo<ItemType[]>(
+  const items = useMemo<DropdownMenuCheckboxItem[]>(
     () =>
       (topics || []).map((topic) => ({
+        checked: topic.id === activeTopicId,
+        closeOnClick: true,
         key: topic.id,
         label: topic.title,
-        onClick: () => switchTopic(topic.id),
+        onCheckedChange: (checked) => {
+          if (checked) {
+            handleSwitchTopic(topic.id);
+          }
+        },
+        type: 'checkbox',
       })),
-    [topics, t, switchTopic],
+    [topics, handleSwitchTopic, activeTopicId],
   );
+  const isEmpty = !topics || topics.length === 0;
 
   return (
     <NavHeader
@@ -49,26 +64,18 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
         <>
           <ActionIcon
             icon={PlusIcon}
-            onClick={() => switchTopic()}
+            onClick={() => handleSwitchTopic(undefined)}
             size={DESKTOP_HEADER_ICON_SIZE}
             title={t('actions.addNewTopic')}
           />
-          <Dropdown
-            disabled={!topics || topics.length === 0}
-            menu={{
-              items,
-              selectedKeys: activeTopicId ? [activeTopicId] : [],
-            }}
-            overlayStyle={{
-              maxHeight: 600,
-              minWidth: 200,
-              overflowY: 'auto',
-            }}
+          <DropdownMenu
+            items={items}
             placement="bottomRight"
-            trigger={['click']}
+            popupProps={{ style: { maxHeight: 600, minWidth: 200, overflowY: 'auto' } }}
+            triggerProps={{ disabled: isEmpty }}
           >
-            <ActionIcon disabled={!topics || topics.length === 0} icon={Clock3Icon} />
-          </Dropdown>
+            <ActionIcon disabled={isEmpty} icon={Clock3Icon} />
+          </DropdownMenu>
         </>
       }
       showTogglePanelButton={false}

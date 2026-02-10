@@ -1,23 +1,12 @@
 'use client';
 
-import {
-  ReactCodePlugin,
-  ReactCodeblockPlugin,
-  ReactHRPlugin,
-  ReactImagePlugin,
-  ReactLinkPlugin,
-  ReactListPlugin,
-  ReactLiteXmlPlugin,
-  ReactMathPlugin,
-  ReactTablePlugin,
-  ReactToolbarPlugin,
-} from '@lobehub/editor';
-import { Editor } from '@lobehub/editor/react';
 import { type CSSProperties, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { EditorCanvas as SharedEditorCanvas } from '@/features/EditorCanvas';
+
 import { usePageEditorStore } from '../store';
-import InlineToolbar from './InlineToolbar';
+import { useAskCopilotItem } from './useAskCopilotItem';
 import { useSlashItems } from './useSlashItems';
 
 interface EditorCanvasProps {
@@ -29,53 +18,20 @@ const EditorCanvas = memo<EditorCanvasProps>(({ placeholder, style }) => {
   const { t } = useTranslation(['file', 'editor']);
 
   const editor = usePageEditorStore((s) => s.editor);
-  const handleContentChange = usePageEditorStore((s) => s.handleContentChange);
-  const onEditorInit = usePageEditorStore((s) => s.onEditorInit);
+  const documentId = usePageEditorStore((s) => s.documentId);
 
   const slashItems = useSlashItems(editor);
-
-  if (!editor) return null;
+  const askCopilotItem = useAskCopilotItem(editor);
 
   return (
-    <div
-      onClick={(e) => {
-        e.stopPropagation();
-        e.preventDefault();
-      }}
-    >
-      <Editor
-        content={''}
-        editor={editor!}
-        lineEmptyPlaceholder={placeholder || t('pageEditor.editorPlaceholder')}
-        onInit={onEditorInit}
-        onTextChange={handleContentChange}
-        placeholder={placeholder || t('pageEditor.editorPlaceholder')}
-        plugins={[
-          ReactLiteXmlPlugin,
-          ReactListPlugin,
-          ReactCodePlugin,
-          ReactCodeblockPlugin,
-          ReactHRPlugin,
-          ReactLinkPlugin,
-          ReactTablePlugin,
-          ReactMathPlugin,
-          Editor.withProps(ReactImagePlugin, {
-            defaultBlockImage: true,
-          }),
-          Editor.withProps(ReactToolbarPlugin, {
-            children: <InlineToolbar floating />,
-          }),
-        ]}
-        slashOption={{
-          items: slashItems,
-        }}
-        style={{
-          paddingBottom: 64,
-          ...style,
-        }}
-        type={'text'}
-      />
-    </div>
+    <SharedEditorCanvas
+      documentId={documentId}
+      editor={editor}
+      placeholder={placeholder || t('pageEditor.editorPlaceholder')}
+      slashItems={slashItems}
+      style={style}
+      toolbarExtraItems={askCopilotItem}
+    />
   );
 });
 

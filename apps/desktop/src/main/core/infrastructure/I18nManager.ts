@@ -149,17 +149,6 @@ export class I18nManager {
    */
   private notifyRendererProcess(lng: string) {
     logger.debug(`Notifying renderer process of language change: ${lng}`);
-
-    // Send language change event to all windows
-    // const windows = this.app.browserManager.windows;
-    //
-    // if (windows && windows.length > 0) {
-    //   windows.forEach((window) => {
-    //     if (window?.webContents) {
-    //       window.webContents.send('language-changed', lng);
-    //     }
-    //   });
-    // }
   }
 
   private async loadLocale(language: string) {
@@ -175,6 +164,7 @@ export class I18nManager {
     try {
       logger.debug(`Loading namespace: ${lng}/${ns}`);
       const resources = await loadResources(lng, ns);
+
       this.i18n.addResourceBundle(lng, ns, resources, true, true);
       return true;
     } catch (error) {

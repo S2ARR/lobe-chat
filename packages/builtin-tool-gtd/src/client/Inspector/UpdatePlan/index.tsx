@@ -1,34 +1,20 @@
 'use client';
 
 import type { BuiltinInspectorProps } from '@lobechat/types';
-import { Icon } from '@lobehub/ui';
-import { createStaticStyles, cx } from 'antd-style';
+import { Icon, Text } from '@lobehub/ui';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { CheckCircle, DiffIcon } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { shinyTextStyles } from '@/styles';
+import { oneLineEllipsis, shinyTextStyles } from '@/styles';
 
 import type { UpdatePlanParams, UpdatePlanState } from '../../../types';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
-  completed: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorSuccess};
-  `,
-  root: css`
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-  `,
   title: css`
     margin-inline-end: 8px;
     color: ${cssVar.colorText};
-  `,
-  updated: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorWarning};
   `,
 }));
 
@@ -42,26 +28,26 @@ export const UpdatePlanInspector = memo<BuiltinInspectorProps<UpdatePlanParams, 
 
     if (isArgumentsStreaming && !planId) {
       return (
-        <div className={cx(styles.root, shinyTextStyles.shinyText)}>
+        <div className={cx(oneLineEllipsis, shinyTextStyles.shinyText)}>
           <span>{t('builtins.lobe-gtd.apiName.updatePlan')}</span>
         </div>
       );
     }
 
     return (
-      <div className={cx(styles.root, isArgumentsStreaming && shinyTextStyles.shinyText)}>
+      <div className={cx(oneLineEllipsis, isArgumentsStreaming && shinyTextStyles.shinyText)}>
         <span className={styles.title}>{t('builtins.lobe-gtd.apiName.updatePlan')}</span>
         {completed && (
-          <span className={styles.completed}>
+          <Text as={'span'} code color={cssVar.colorSuccess} fontSize={12}>
             <Icon icon={CheckCircle} size={12} />
             {t('builtins.lobe-gtd.apiName.updatePlan.completed')}
-          </span>
+          </Text>
         )}
         {hasUpdates && !completed && (
-          <span className={styles.updated}>
+          <Text as={'span'} code color={cssVar.colorWarning} fontSize={12}>
             <Icon icon={DiffIcon} size={12} />
             {t('builtins.lobe-gtd.apiName.updatePlan.modified')}
-          </span>
+          </Text>
         )}
       </div>
     );

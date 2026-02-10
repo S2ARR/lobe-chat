@@ -42,7 +42,7 @@ export const openaiChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2025-12-11',
     settings: {
-      extendParams: ['gpt5_1ReasoningEffort', 'textVerbosity'],
+      extendParams: ['gpt5_2ReasoningEffort', 'textVerbosity'],
       searchImpl: 'params',
     },
     type: 'chat',
@@ -68,6 +68,7 @@ export const openaiChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2025-12-11',
     settings: {
+      extendParams: ['gpt5_2ProReasoningEffort'],
       searchImpl: 'params',
     },
     type: 'chat',
@@ -203,7 +204,8 @@ export const openaiChatModels: AIChatModelCard[] = [
       vision: true,
     },
     contextWindowTokens: 400_000,
-    description: 'GPT-5 pro uses more compute to think deeper and consistently deliver better answers.',
+    description:
+      'GPT-5 pro uses more compute to think deeper and consistently deliver better answers.',
     displayName: 'GPT-5 pro',
     id: 'gpt-5-pro',
     maxOutput: 272_000,
@@ -563,7 +565,8 @@ export const openaiChatModels: AIChatModelCard[] = [
       vision: true,
     },
     contextWindowTokens: 1_047_576,
-    description: 'GPT-4.1 is our flagship model for complex tasks and cross-domain problem solving.',
+    description:
+      'GPT-4.1 is our flagship model for complex tasks and cross-domain problem solving.',
     displayName: 'GPT-4.1',
     id: 'gpt-4.1',
     maxOutput: 32_768,
@@ -1216,6 +1219,26 @@ export const openaiSTTModels: AISTTModelCard[] = [
 
 // Image generation models
 export const openaiImageModels: AIImageModelCard[] = [
+  {
+    description:
+      'An enhanced GPT Image 1 model with 4× faster generation, more precise editing, and improved text rendering.',
+    displayName: 'GPT Image 1.5',
+    enabled: true,
+    id: 'gpt-image-1.5',
+    parameters: gptImage1ParamsSchema,
+    pricing: {
+      approximatePricePerImage: 0.034,
+      units: [
+        { name: 'textInput', rate: 5, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput_cacheRead', rate: 1.25, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'imageInput', rate: 8, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'imageInput_cacheRead', rate: 2, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'imageOutput', rate: 32, strategy: 'fixed', unit: 'millionTokens' },
+      ],
+    },
+    releasedAt: '2025-12-16',
+    type: 'image',
+  },
   // https://platform.openai.com/docs/models/gpt-image-1
   {
     description: 'ChatGPT native multimodal image generation model.',
@@ -1233,7 +1256,6 @@ export const openaiImageModels: AIImageModelCard[] = [
         { name: 'imageOutput', rate: 40, strategy: 'fixed', unit: 'millionTokens' },
       ],
     },
-    resolutions: ['1024x1024', '1024x1536', '1536x1024'],
     type: 'image',
   },
   {
@@ -1254,13 +1276,13 @@ export const openaiImageModels: AIImageModelCard[] = [
       ],
     },
     releasedAt: '2025-10-06',
-    resolutions: ['1024x1024', '1024x1536', '1536x1024'],
     type: 'image',
   },
   {
     description:
       'The latest DALL·E model, released in November 2023, supports more realistic, accurate image generation with stronger detail.',
     displayName: 'DALL·E 3',
+    enabled: true,
     id: 'dall-e-3',
     parameters: {
       prompt: { default: '' },
@@ -1293,7 +1315,6 @@ export const openaiImageModels: AIImageModelCard[] = [
         },
       ],
     },
-    resolutions: ['1024x1024', '1024x1792', '1792x1024'],
     type: 'image',
   },
   {
@@ -1326,7 +1347,6 @@ export const openaiImageModels: AIImageModelCard[] = [
         },
       ],
     },
-    resolutions: ['256x256', '512x512', '1024x1024'],
     type: 'image',
   },
 ];

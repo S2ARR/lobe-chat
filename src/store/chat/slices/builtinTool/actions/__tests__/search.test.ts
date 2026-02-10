@@ -1,10 +1,15 @@
+import { WebBrowsingApiName, WebBrowsingManifest } from '@lobechat/builtin-tool-web-browsing';
 import { SearchQuery } from '@lobechat/types';
 import { UIChatMessage } from '@lobechat/types';
 import { act, renderHook } from '@testing-library/react';
 import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Import after mocks
+import { useChatStore } from '@/store/chat';
+import { dbMessageSelectors } from '@/store/chat/selectors';
+
 // Mock the tools module to avoid importing the problematic dependencies
-vi.mock('@/tools/web-browsing', () => ({
+vi.mock('@lobechat/builtin-tool-web-browsing', () => ({
   WebBrowsingApiName: {
     search: 'search',
     crawlSinglePage: 'crawlSinglePage',
@@ -14,11 +19,6 @@ vi.mock('@/tools/web-browsing', () => ({
     identifier: 'lobe-web-browsing',
   },
 }));
-
-// Import after mocks
-import { useChatStore } from '@/store/chat';
-import { dbMessageSelectors } from '@/store/chat/selectors';
-import { WebBrowsingApiName, WebBrowsingManifest } from '@/tools/web-browsing';
 
 vi.mock('@/store/chat/selectors', () => ({
   dbMessageSelectors: {
@@ -32,7 +32,6 @@ describe('search actions', () => {
     useChatStore.setState({
       activeAgentId: 'session-id',
       activeTopicId: 'topic-id',
-      searchLoading: {},
       messageOperationMap: {},
       optimisticUpdateMessageContent: vi.fn(),
       optimisticUpdateMessagePluginError: vi.fn(),
@@ -44,7 +43,7 @@ describe('search actions', () => {
       invokeBuiltinTool: vi.fn(),
     });
 
-    // Default mock for dbMessageSelectors - returns undefined to use activeId/activeTopicId
+    // Default mock for dbMessageSelectors - returns undefined to use activeAgentId/activeTopicId
     vi.spyOn(dbMessageSelectors, 'getDbMessageById').mockImplementation(() => () => undefined);
   });
 
@@ -62,7 +61,6 @@ describe('search actions', () => {
         content: '',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       vi.spyOn(dbMessageSelectors, 'getDbMessageById').mockImplementation(
@@ -116,7 +114,6 @@ describe('search actions', () => {
         content: '',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       vi.spyOn(dbMessageSelectors, 'getDbMessageById').mockImplementation(
@@ -195,7 +192,6 @@ describe('search actions', () => {
         role: 'assistant',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       vi.spyOn(dbMessageSelectors, 'getDbMessageById').mockImplementation(
@@ -284,7 +280,6 @@ describe('search actions', () => {
         role: 'tool',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       vi.spyOn(dbMessageSelectors, 'getDbMessageById').mockImplementation(

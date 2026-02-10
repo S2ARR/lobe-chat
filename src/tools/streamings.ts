@@ -1,9 +1,27 @@
-import { LocalSystemManifest } from '@lobechat/builtin-tool-local-system';
+import {
+  AgentBuilderManifest,
+  AgentBuilderStreamings,
+} from '@lobechat/builtin-tool-agent-builder/client';
+import {
+  CloudSandboxManifest,
+  CloudSandboxStreamings,
+} from '@lobechat/builtin-tool-cloud-sandbox/client';
+import {
+  GroupAgentBuilderManifest,
+  GroupAgentBuilderStreamings,
+} from '@lobechat/builtin-tool-group-agent-builder/client';
+import {
+  GroupManagementManifest,
+  GroupManagementStreamings,
+} from '@lobechat/builtin-tool-group-management/client';
+import { GTDManifest, GTDStreamings } from '@lobechat/builtin-tool-gtd/client';
+import {
+  LocalSystemManifest,
+  LocalSystemStreamings,
+} from '@lobechat/builtin-tool-local-system/client';
+import { MemoryManifest, MemoryStreamings } from '@lobechat/builtin-tool-memory/client';
+import { NotebookManifest, NotebookStreamings } from '@lobechat/builtin-tool-notebook/client';
 import { type BuiltinStreaming } from '@lobechat/types';
-
-import { CodeInterpreterIdentifier } from './code-interpreter';
-import { CodeInterpreterStreamings } from './code-interpreter/Streaming';
-import { LocalSystemStreamings } from './local-system/Streaming';
 
 /**
  * Builtin tools streaming renderer registry
@@ -14,8 +32,20 @@ import { LocalSystemStreamings } from './local-system/Streaming';
  * The component should fetch streaming content from store internally.
  */
 const BuiltinToolStreamings: Record<string, Record<string, BuiltinStreaming>> = {
-  [CodeInterpreterIdentifier]: CodeInterpreterStreamings as Record<string, BuiltinStreaming>,
+  [AgentBuilderManifest.identifier]: AgentBuilderStreamings as Record<string, BuiltinStreaming>,
+  [CloudSandboxManifest.identifier]: CloudSandboxStreamings as Record<string, BuiltinStreaming>,
+  [GroupAgentBuilderManifest.identifier]: GroupAgentBuilderStreamings as Record<
+    string,
+    BuiltinStreaming
+  >,
+  [GroupManagementManifest.identifier]: GroupManagementStreamings as Record<
+    string,
+    BuiltinStreaming
+  >,
+  [GTDManifest.identifier]: GTDStreamings as Record<string, BuiltinStreaming>,
   [LocalSystemManifest.identifier]: LocalSystemStreamings as Record<string, BuiltinStreaming>,
+  [MemoryManifest.identifier]: MemoryStreamings as Record<string, BuiltinStreaming>,
+  [NotebookManifest.identifier]: NotebookStreamings as Record<string, BuiltinStreaming>,
 };
 
 /**

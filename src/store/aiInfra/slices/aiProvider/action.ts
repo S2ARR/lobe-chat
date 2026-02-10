@@ -1,4 +1,3 @@
-import { DESKTOP_USER_ID, isDesktop } from '@lobechat/const';
 import { getModelPropertyWithFallback, resolveImageSinglePrice } from '@lobechat/model-runtime';
 import { uniqBy } from 'es-toolkit/compat';
 import {
@@ -16,7 +15,7 @@ import { mutate, useClientDataSWR } from '@/libs/swr';
 import { aiProviderService } from '@/services/aiProvider';
 import { type AiInfraStore } from '@/store/aiInfra/store';
 import { useUserStore } from '@/store/user';
-import { authSelectors, userProfileSelectors } from '@/store/user/selectors';
+import { authSelectors } from '@/store/user/selectors';
 import {
   type AiProviderDetailItem,
   type AiProviderListItem,
@@ -260,6 +259,19 @@ export const createAiProviderSlice: StateCreator<
   toggleProviderEnabled: async (id: string, enabled: boolean) => {
     get().internal_toggleAiProviderLoading(id, true);
     await aiProviderService.toggleProviderEnabled(id, enabled);
+
+    // Immediately update local aiProviderList to reflect the change
+    // This ensures the switch displays correctly without waiting for SWR refresh
+    set(
+      (state) => ({
+        aiProviderList: state.aiProviderList.map((item) =>
+          item.id === id ? { ...item, enabled } : item,
+        ),
+      }),
+      false,
+      'toggleProviderEnabled/syncEnabled',
+    );
+
     await get().refreshAiProviderList();
 
     get().internal_toggleAiProviderLoading(id, false);
@@ -277,6 +289,61 @@ export const createAiProviderSlice: StateCreator<
   updateAiProviderConfig: async (id, value) => {
     get().internal_toggleAiProviderConfigUpdating(id, true);
     await aiProviderService.updateAiProviderConfig(id, value);
+
+    // Immediately update local state for instant UI feedback
+    set(
+      (state) => {
+        const currentRuntimeConfig = state.aiProviderRuntimeConfig[id];
+        const currentDetailConfig = state.aiProviderDetailMap[id];
+
+        const updates: Partial<typeof currentRuntimeConfig> = {};
+        const detailUpdates: Partial<typeof currentDetailConfig> = {};
+
+        // Update fetchOnClient if changed
+        if (typeof value.fetchOnClient !== 'undefined') {
+          // Convert null to undefined to match the interface definition
+          const fetchOnClientValue = value.fetchOnClient === null ? undefined : value.fetchOnClient;
+          updates.fetchOnClient = fetchOnClientValue;
+          detailUpdates.fetchOnClient = fetchOnClientValue;
+        }
+
+        // Update config.enableResponseApi if changed
+        if (value.config?.enableResponseApi !== undefined && currentRuntimeConfig?.config) {
+          updates.config = {
+            ...currentRuntimeConfig.config,
+            enableResponseApi: value.config.enableResponseApi,
+          };
+        }
+
+        return {
+          // Update detail map for form display
+          aiProviderDetailMap:
+            currentDetailConfig && Object.keys(detailUpdates).length > 0
+              ? {
+                  ...state.aiProviderDetailMap,
+                  [id]: {
+                    ...currentDetailConfig,
+                    ...detailUpdates,
+                  },
+                }
+              : state.aiProviderDetailMap,
+          // Update runtime config for selectors
+          aiProviderRuntimeConfig:
+            currentRuntimeConfig && Object.keys(updates).length > 0
+              ? {
+                  ...state.aiProviderRuntimeConfig,
+                  [id]: {
+                    ...currentRuntimeConfig,
+                    ...updates,
+                  },
+                }
+              : state.aiProviderRuntimeConfig,
+        };
+      },
+      false,
+      'updateAiProviderConfig/syncChanges',
+    );
+
     await get().refreshAiProviderDetail();
 
     get().internal_toggleAiProviderConfigUpdating(id, false);
@@ -294,7 +361,14 @@ export const createAiProviderSlice: StateCreator<
         onSuccess: (data) => {
           if (!data) return;
 
-          set({ activeAiProvider: id, aiProviderDetail: data }, false, 'useFetchAiProviderItem');
+          set(
+            (state) => ({
+              activeAiProvider: id,
+              aiProviderDetailMap: { ...state.aiProviderDetailMap, [id]: data },
+            }),
+            false,
+            'useFetchAiProviderItem',
+          );
         },
       },
     ),
@@ -319,26 +393,11 @@ export const createAiProviderSlice: StateCreator<
       },
     ),
 
-  useFetchAiProviderRuntimeState: (isLogin, isSyncActive?) => {
+  useFetchAiProviderRuntimeState: (isLogin) => {
     const isAuthLoaded = useUserStore(authSelectors.isLoaded);
-    const userId = useUserStore(userProfileSelectors.userId);
     // Only fetch when auth is loaded and login status is explicitly defined (true or false)
     // Prevents unnecessary requests when login state is null/undefined
-    let shouldFetch = isAuthLoaded && isLogin !== null && isLogin !== undefined;
-
-    if (isDesktop) {
-      if (isSyncActive) {
-        if (userId === undefined || userId === DESKTOP_USER_ID) {
-          shouldFetch = false;
-        } else {
-          shouldFetch = true;
-        }
-      } else if (userId === undefined) {
-        shouldFetch = false;
-      } else {
-        shouldFetch = true;
-      }
-    }
+    const shouldFetch = isAuthLoaded && isLogin !== null && isLogin !== undefined;
 
     return useClientDataSWR<AiProviderRuntimeStateWithBuiltinModels | undefined>(
       shouldFetch ? [AiProviderSwrKey.fetchAiProviderRuntimeState, isLogin] : null,
@@ -399,7 +458,6 @@ export const createAiProviderSlice: StateCreator<
         };
       },
       {
-        focusThrottleInterval: isDesktop ? 100 : undefined,
         onSuccess: (data) => {
           if (!data) return;
 

@@ -72,6 +72,12 @@ export interface GenerateToolsParams {
   model: string;
   /** Provider name */
   provider: string;
+  /**
+   * Whether to skip merging default tools.
+   * When true, only the explicitly provided toolIds will be used.
+   * Useful for broadcast scenarios where tools should be completely disabled.
+   */
+  skipDefaultTools?: boolean;
   /** List of tool IDs to enable */
   toolIds?: string[];
 }
@@ -101,6 +107,8 @@ export interface ToolsEngineOptions {
  * Tools generation result
  */
 export interface ToolsGenerationResult {
+  /** List of enabled manifests with systemRole and other metadata */
+  enabledManifests: LobeToolManifest[];
   /** List of enabled tool IDs */
   enabledToolIds: string[];
   /** Filtered plugins and their reasons */

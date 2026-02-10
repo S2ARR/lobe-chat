@@ -6,24 +6,26 @@ import type { Header, Redirect } from 'next/dist/lib/load-custom-routes';
 import ReactComponentName from 'react-scan/react-component-name/webpack';
 
 interface CustomNextConfig {
+  experimental?: NextConfig['experimental'];
   headers?: Header[];
+  outputFileTracingExcludes?: NextConfig['outputFileTracingExcludes'];
   redirects?: Redirect[];
+  serverExternalPackages?: NextConfig['serverExternalPackages'];
   turbopack?: NextConfig['turbopack'];
+  webpack?: NextConfig['webpack'];
 }
 
 export function defineConfig(config: CustomNextConfig) {
   const isProd = process.env.NODE_ENV === 'production';
   const buildWithDocker = process.env.DOCKER === 'true';
-  const isDesktop = process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';
+
   const enableReactScan = !!process.env.REACT_SCAN_MONITOR_API_KEY;
   const shouldUseCSP = process.env.ENABLED_CSP === '1';
 
   const isTest =
     process.env.NODE_ENV === 'test' || process.env.TEST === '1' || process.env.E2E === '1';
 
-  // if you need to proxy the api endpoint to remote server
-
-  const isStandaloneMode = buildWithDocker || isDesktop;
+  const isStandaloneMode = buildWithDocker || process.env.NEXT_BUILD_STANDALONE === '1';
 
   const standaloneConfig: NextConfig = {
     output: 'standalone',
@@ -35,6 +37,7 @@ export function defineConfig(config: CustomNextConfig) {
   const nextConfig: NextConfig = {
     ...(isStandaloneMode ? standaloneConfig : {}),
     assetPrefix,
+
     compiler: {
       emotion: true,
     },
@@ -56,6 +59,7 @@ export function defineConfig(config: CustomNextConfig) {
       webVitalsAttribution: ['CLS', 'LCP'],
       webpackBuildWorker: true,
       webpackMemoryOptimizations: true,
+      ...config.experimental,
     },
     async headers() {
       const securityHeaders = [
@@ -235,6 +239,9 @@ export function defineConfig(config: CustomNextConfig) {
         hmrRefreshes: true,
       },
     },
+    ...(config.outputFileTracingExcludes && {
+      outputFileTracingExcludes: config.outputFileTracingExcludes,
+    }),
     reactStrictMode: true,
     redirects: async () => [
       {
@@ -263,7 +270,7 @@ export function defineConfig(config: CustomNextConfig) {
         source: '/manifest.json',
       },
       {
-        destination: '/community/assistant',
+        destination: '/community/agent',
         permanent: true,
         source: '/community/assistants',
       },
@@ -304,13 +311,27 @@ export function defineConfig(config: CustomNextConfig) {
         permanent: false,
         source: '/repos',
       },
+      {
+        destination: '/',
+        permanent: true,
+        source: '/chat',
+      },
+      // Redirect old Clerk login route to Better Auth signin
+      {
+        destination: '/signin',
+        permanent: true,
+        source: '/login',
+      },
       ...(config.redirects ?? []),
     ],
-
     // when external packages in dev mode with turbopack, this config will lead to bundle error
-    serverExternalPackages: isProd ? ['@electric-sql/pglite', 'pdfkit'] : ['pdfkit'],
+    // @napi-rs/canvas is a native module that can't be bundled by Turbopack
+    // pdfjs-dist uses @napi-rs/canvas for DOMMatrix polyfill in Node.js environment
+    serverExternalPackages: config.serverExternalPackages
+      ? config.serverExternalPackages
+      : ['pdfkit', '@napi-rs/canvas', 'pdfjs-dist'],
 
-    transpilePackages: ['pdfjs-dist', 'mermaid', 'better-auth-harmony'],
+    transpilePackages: ['mermaid', 'better-auth-harmony'],
     turbopack: {
       rules: isTest
         ? void 0
@@ -325,20 +346,20 @@ export function defineConfig(config: CustomNextConfig) {
       ignoreBuildErrors: true,
     },
 
-    webpack(config) {
-      config.experiments = {
+    webpack(baseWebpackConfig, options) {
+      baseWebpackConfig.experiments = {
         asyncWebAssembly: true,
         layers: true,
       };
 
       // 开启该插件会导致 pglite 的 fs bundler 被改表
       if (enableReactScan) {
-        config.plugins.push(ReactComponentName({}));
+        baseWebpackConfig.plugins.push(ReactComponentName({}));
       }
 
       // to fix shikiji compile error
       // refs: https://github.com/antfu/shikiji/issues/23
-      config.module.rules.push({
+      baseWebpackConfig.module.rules.push({
         resolve: {
           fullySpecified: false,
         },
@@ -346,15 +367,12 @@ export function defineConfig(config: CustomNextConfig) {
         type: 'javascript/auto',
       });
 
-      // https://github.com/pinojs/pino/issues/688#issuecomment-637763276
-      config.externals.push('pino-pretty');
-
-      config.resolve.alias.canvas = false;
+      baseWebpackConfig.resolve.alias.canvas = false;
 
       // to ignore epub2 compile error
       // refs: https://github.com/lobehub/lobe-chat/discussions/6769
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
+      baseWebpackConfig.resolve.fallback = {
+        ...baseWebpackConfig.resolve.fallback,
         zipfile: false,
       };
 
@@ -364,7 +382,7 @@ export function defineConfig(config: CustomNextConfig) {
       ) {
         // fix the Worker URL cross-origin issue
         // refs: https://github.com/lobehub/lobe-chat/pull/9624
-        config.module.rules.push({
+        baseWebpackConfig.module.rules.push({
           generator: {
             // @see https://webpack.js.org/configuration/module/#rulegeneratorpublicpath
             publicPath: '/_next/',
@@ -375,7 +393,13 @@ export function defineConfig(config: CustomNextConfig) {
         });
       }
 
-      return config;
+      const updatedConfig = baseWebpackConfig;
+
+      if (config.webpack) {
+        return config.webpack(updatedConfig, options);
+      }
+
+      return updatedConfig;
     },
   };
 
@@ -383,14 +407,13 @@ export function defineConfig(config: CustomNextConfig) {
 
   const withBundleAnalyzer = process.env.ANALYZE === 'true' ? analyzer() : noWrapper;
 
-  const withPWA =
-    isProd && !isDesktop
-      ? withSerwistInit({
-          register: false,
-          swDest: 'public/sw.js',
-          swSrc: 'src/app/sw.ts',
-        })
-      : noWrapper;
+  const withPWA = isProd
+    ? withSerwistInit({
+        register: false,
+        swDest: 'public/sw.js',
+        swSrc: 'src/app/sw.ts',
+      })
+    : noWrapper;
 
   return withBundleAnalyzer(withPWA(nextConfig as NextConfig));
 }

@@ -66,7 +66,13 @@ export interface MessageCRUDAction {
 
   // ===== Delete ===== //
   /**
-   * Delete a single message
+   * Delete a single DB message directly without handling display message aggregation logic
+   * Use this when you need to delete a single raw database message
+   */
+  deleteDBMessage: (id: string) => Promise<void>;
+
+  /**
+   * Delete a single message (handles display message aggregation like assistantGroup)
    */
   deleteMessage: (id: string) => Promise<void>;
 
@@ -266,6 +272,23 @@ export const messageCRUDSlice: StateCreator<
   },
 
   // ===== Delete ===== //
+  deleteDBMessage: async (id) => {
+    const { internal_dispatchMessage, replaceMessages, context } = get();
+
+    const message = dataSelectors.getDbMessageById(id)(get());
+    if (!message) return;
+
+    // Optimistic update
+    internal_dispatchMessage({ id, type: 'deleteMessage' });
+
+    // Persist to database
+    const result = await messageService.removeMessage(id, context);
+
+    if (result?.success && result.messages) {
+      replaceMessages(result.messages);
+    }
+  },
+
   deleteMessage: async (id) => {
     const state = get();
     const { internal_dispatchMessage, replaceMessages, context } = state;
@@ -275,8 +298,8 @@ export const messageCRUDSlice: StateCreator<
 
     let ids = [message.id];
 
-    // Handle assistantGroup messages: delete all child blocks and tool results
-    if (message.role === 'assistantGroup' && message.children) {
+    // Handle assistantGroup and supervisor messages: delete all child blocks and tool results
+    if ((message.role === 'assistantGroup' || message.role === 'supervisor') && message.children) {
       const childIds = message.children.map((child: AssistantContentBlock) => child.id);
       ids = ids.concat(childIds);
 

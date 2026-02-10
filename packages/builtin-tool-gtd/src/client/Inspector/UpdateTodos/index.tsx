@@ -1,35 +1,17 @@
 'use client';
 
 import type { BuiltinInspectorProps } from '@lobechat/types';
-import { Icon } from '@lobehub/ui';
-import { createStaticStyles, cx } from 'antd-style';
+import { Icon, Text } from '@lobehub/ui';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { CheckCircle, DiffIcon, Minus, Plus } from 'lucide-react';
 import { type ReactNode, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { shinyTextStyles } from '@/styles';
+import { oneLineEllipsis, shinyTextStyles } from '@/styles';
 
 import type { UpdateTodosParams, UpdateTodosState } from '../../../types';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
-  add: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorSuccess};
-  `,
-  complete: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorPrimary};
-  `,
-  remove: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorError};
-  `,
-  root: css`
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-  `,
   separator: css`
     margin-inline: 2px;
     color: ${cssVar.colorTextQuaternary};
@@ -37,10 +19,6 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   title: css`
     margin-inline-end: 8px;
     color: ${cssVar.colorText};
-  `,
-  update: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorWarning};
   `,
 }));
 
@@ -82,7 +60,7 @@ export const UpdateTodosInspector = memo<
 
   if (isArgumentsStreaming && !hasOperations) {
     return (
-      <div className={cx(styles.root, shinyTextStyles.shinyText)}>
+      <div className={cx(oneLineEllipsis, shinyTextStyles.shinyText)}>
         <span>{t('builtins.lobe-gtd.apiName.updateTodos')}</span>
       </div>
     );
@@ -91,39 +69,39 @@ export const UpdateTodosInspector = memo<
   const statsParts: ReactNode[] = [];
   if (counts.add > 0) {
     statsParts.push(
-      <span className={styles.add} key="add">
+      <Text as={'span'} code color={cssVar.colorSuccess} fontSize={12} key="add">
         <Icon icon={Plus} size={12} />
         {counts.add}
-      </span>,
+      </Text>,
     );
   }
   if (counts.update > 0) {
     statsParts.push(
-      <span className={styles.update} key="update">
+      <Text as={'span'} code color={cssVar.colorWarning} fontSize={12} key="update">
         <Icon icon={DiffIcon} size={12} />
         {counts.update}
-      </span>,
+      </Text>,
     );
   }
   if (counts.complete > 0) {
     statsParts.push(
-      <span className={styles.complete} key="complete">
+      <Text as={'span'} code color={cssVar.colorPrimary} fontSize={12} key="complete">
         <Icon icon={CheckCircle} size={12} />
         {counts.complete}
-      </span>,
+      </Text>,
     );
   }
   if (counts.remove > 0) {
     statsParts.push(
-      <span className={styles.remove} key="remove">
+      <Text as={'span'} code color={cssVar.colorError} fontSize={12} key="remove">
         <Icon icon={Minus} size={12} />
         {counts.remove}
-      </span>,
+      </Text>,
     );
   }
 
   return (
-    <div className={cx(styles.root, isArgumentsStreaming && shinyTextStyles.shinyText)}>
+    <div className={cx(oneLineEllipsis, isArgumentsStreaming && shinyTextStyles.shinyText)}>
       <span className={styles.title}>{t('builtins.lobe-gtd.apiName.updateTodos')}</span>
       {statsParts.length > 0 && (
         <>

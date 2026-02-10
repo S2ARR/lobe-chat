@@ -1,7 +1,6 @@
 'use client';
 
-import { INBOX_SESSION_ID, enableNextAuth } from '@lobechat/const';
-import { usePathname } from 'next/navigation';
+import { INBOX_SESSION_ID } from '@lobechat/const';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createStoreUpdater } from 'zustand-utils';
@@ -15,23 +14,26 @@ import { useGlobalStore } from '@/store/global';
 import { useServerConfigStore } from '@/store/serverConfig';
 import { serverConfigSelectors } from '@/store/serverConfig/selectors';
 import { useUserStore } from '@/store/user';
-import { authSelectors, onboardingSelectors } from '@/store/user/selectors';
+import { authSelectors } from '@/store/user/selectors';
 import { useUserMemoryStore } from '@/store/userMemory';
+
+import { useUserStateRedirect } from './useUserStateRedirect';
 
 const StoreInitialization = memo(() => {
   // prefetch error ns to avoid don't show error content correctly
   useTranslation('error');
 
-  const pathname = usePathname();
-  const [isLogin, isSignedIn, useInitUserState] = useUserStore((s) => [
+  const [isLogin, useInitUserState] = useUserStore((s) => [
     authSelectors.isLogin(s),
-    s.isSignedIn,
     s.useInitUserState,
   ]);
 
   const { serverConfig } = useServerConfigStore();
 
-  const useInitSystemStatus = useGlobalStore((s) => s.useInitSystemStatus);
+  const [useInitSystemStatus, useCheckServerVersion] = useGlobalStore((s) => [
+    s.useInitSystemStatus,
+    s.useCheckServerVersion,
+  ]);
 
   const useInitBuiltinAgent = useAgentStore((s) => s.useInitBuiltinAgent);
   const useInitAiProviderKeyVaults = useAiInfraStore((s) => s.useFetchAiProviderRuntimeState);
@@ -39,6 +41,9 @@ const StoreInitialization = memo(() => {
 
   // init the system preference
   useInitSystemStatus();
+
+  // check server version in desktop app
+  useCheckServerVersion();
 
   // fetch server config
   const useFetchServerConfig = useServerConfigStore((s) => s.useInitServerConfig);
@@ -57,7 +62,7 @@ const StoreInitialization = memo(() => {
    * IMPORTANT: Explicitly convert to boolean to avoid passing null/undefined downstream,
    * which would cause unnecessary API requests with invalid login state.
    */
-  const isLoginOnInit = Boolean(enableNextAuth ? isSignedIn : isLogin);
+  const isLoginOnInit = Boolean(isLogin);
 
   // init inbox agent via builtin agent mechanism
   useInitBuiltinAgent(INBOX_SESSION_ID, { isLogin: isLoginOnInit });
@@ -70,21 +75,11 @@ const StoreInitialization = memo(() => {
   // init user memory identities (for chat context injection)
   useInitIdentities(isLoginOnInit);
 
+  const onUserStateSuccess = useUserStateRedirect();
+
   // init user state
   useInitUserState(isLoginOnInit, serverConfig, {
-    onSuccess: (state) => {
-      if (!state.isInWaitList && !pathname?.includes('/waitlist')) {
-        window.location.href = '/waitlist';
-        return;
-      }
-
-      // Skip redirect if already on onboarding page
-      if (pathname?.includes('/onboarding')) return;
-
-      if (onboardingSelectors.needsOnboarding(state)) {
-        window.location.href = '/onboarding';
-      }
-    },
+    onSuccess: onUserStateSuccess,
   });
 
   const useStoreUpdater = createStoreUpdater(useGlobalStore);

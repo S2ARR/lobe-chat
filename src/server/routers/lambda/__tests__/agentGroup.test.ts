@@ -6,7 +6,7 @@ import * as AgentModelModule from '@/database/models/agent';
 import * as ChatGroupModelModule from '@/database/models/chatGroup';
 import * as UserModelModule from '@/database/models/user';
 import * as AgentGroupRepoModule from '@/database/repositories/agentGroup';
-import * as ChatGroupServiceModule from '@/server/services/chatGroup';
+import * as ChatGroupServiceModule from '@/server/services/agentGroup';
 
 import { agentGroupRouter } from '../agentGroup';
 
@@ -50,6 +50,7 @@ describe('agentGroupRouter', () => {
     };
 
     chatGroupServiceMock = {
+      deleteGroup: vi.fn(),
       getGroupDetail: vi.fn(),
       getGroups: vi.fn(),
       mergeAgentsDefaultConfig: vi.fn((_, agents) => agents),
@@ -67,7 +68,7 @@ describe('agentGroupRouter', () => {
       () => agentGroupRepoMock as any,
     );
     vi.spyOn(UserModelModule, 'UserModel').mockImplementation(() => userModelMock as any);
-    vi.spyOn(ChatGroupServiceModule, 'ChatGroupService').mockImplementation(
+    vi.spyOn(ChatGroupServiceModule, 'AgentGroupService').mockImplementation(
       () => chatGroupServiceMock as any,
     );
 
@@ -83,7 +84,7 @@ describe('agentGroupRouter', () => {
         title: 'Test Group',
         description: 'Test Description',
         config: {
-          enableSupervisor: true,
+          allowDM: true,
         },
       };
 
@@ -91,7 +92,7 @@ describe('agentGroupRouter', () => {
         id: 'group-1',
         title: 'Test Group',
         description: 'Test Description',
-        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, enableSupervisor: true },
+        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, allowDM: true },
       };
 
       agentGroupRepoMock.createGroupWithSupervisor.mockResolvedValue({
@@ -104,7 +105,7 @@ describe('agentGroupRouter', () => {
 
       expect(agentGroupRepoMock.createGroupWithSupervisor).toHaveBeenCalledWith({
         ...mockInput,
-        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, enableSupervisor: true },
+        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, allowDM: true },
       });
       expect(result).toEqual({ group: mockCreatedGroup, supervisorAgentId: 'supervisor-1' });
     });
@@ -140,7 +141,7 @@ describe('agentGroupRouter', () => {
       const mockInput = {
         groupConfig: {
           title: 'Team Group',
-          config: { enableSupervisor: true },
+          config: { allowDM: true },
         },
         members: [
           { title: 'Agent 1', systemRole: 'Helper' },
@@ -167,9 +168,10 @@ describe('agentGroupRouter', () => {
       expect(agentGroupRepoMock.createGroupWithSupervisor).toHaveBeenCalledWith(
         {
           title: 'Team Group',
-          config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, enableSupervisor: true },
+          config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, allowDM: true },
         },
         ['agent-1', 'agent-2'],
+        undefined,
       );
       expect(result).toEqual({
         agentIds: ['agent-1', 'agent-2'],
@@ -181,12 +183,15 @@ describe('agentGroupRouter', () => {
 
   describe('deleteGroup', () => {
     it('should delete a group by id', async () => {
-      chatGroupModelMock.delete.mockResolvedValue({ id: 'group-1' });
+      chatGroupServiceMock.deleteGroup.mockResolvedValue({
+        deletedVirtualAgentIds: [],
+        group: { id: 'group-1' },
+      });
 
       const caller = agentGroupRouter.createCaller(mockCtx);
       await caller.deleteGroup({ id: 'group-1' });
 
-      expect(chatGroupModelMock.delete).toHaveBeenCalledWith('group-1');
+      expect(chatGroupServiceMock.deleteGroup).toHaveBeenCalledWith('group-1');
     });
   });
 
@@ -384,14 +389,14 @@ describe('agentGroupRouter', () => {
         id: 'group-1',
         value: {
           title: 'Updated Title',
-          config: { enableSupervisor: false },
+          config: { allowDM: false },
         },
       };
 
       const mockUpdatedGroup = {
         id: 'group-1',
         title: 'Updated Title',
-        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, enableSupervisor: false },
+        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, allowDM: false },
       };
 
       chatGroupModelMock.update.mockResolvedValue(mockUpdatedGroup);
@@ -401,7 +406,7 @@ describe('agentGroupRouter', () => {
 
       expect(chatGroupModelMock.update).toHaveBeenCalledWith('group-1', {
         title: 'Updated Title',
-        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, enableSupervisor: false },
+        config: { ...DEFAULT_CHAT_GROUP_CHAT_CONFIG, allowDM: false },
       });
       expect(result).toEqual(mockUpdatedGroup);
     });

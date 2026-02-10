@@ -4,12 +4,17 @@
  * Central registry for all builtin tool executors.
  * Executors are registered as class instances by identifier.
  */
+import { agentBuilderExecutor } from '@lobechat/builtin-tool-agent-builder/executor';
+import { cloudSandboxExecutor } from '@lobechat/builtin-tool-cloud-sandbox/executor';
+import { groupAgentBuilderExecutor } from '@lobechat/builtin-tool-group-agent-builder/executor';
 import { groupManagementExecutor } from '@lobechat/builtin-tool-group-management/executor';
 import { gtdExecutor } from '@lobechat/builtin-tool-gtd/executor';
+import { knowledgeBaseExecutor } from '@lobechat/builtin-tool-knowledge-base/executor';
+import { localSystemExecutor } from '@lobechat/builtin-tool-local-system/executor';
 import { memoryExecutor } from '@lobechat/builtin-tool-memory/executor';
-import { notebookExecutor } from '@lobechat/builtin-tool-notebook/executor';
 
 import type { IBuiltinToolExecutor } from '../types';
+import { notebookExecutor } from './lobe-notebook';
 import { pageAgentExecutor } from './lobe-page-agent';
 import { webBrowsing } from './lobe-web-browsing';
 
@@ -115,8 +120,13 @@ const registerExecutors = (executors: IBuiltinToolExecutor[]): void => {
 
 // Register all executor instances
 registerExecutors([
+  agentBuilderExecutor,
+  cloudSandboxExecutor,
+  groupAgentBuilderExecutor,
   groupManagementExecutor,
   gtdExecutor,
+  knowledgeBaseExecutor,
+  localSystemExecutor,
   memoryExecutor,
   notebookExecutor,
   pageAgentExecutor,

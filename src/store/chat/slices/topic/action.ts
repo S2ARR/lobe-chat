@@ -2,7 +2,12 @@
 // Note: To make the code more logic and readable, we just disable the auto sort key eslint rule
 // DON'T REMOVE THE FIRST LINE
 import { chainSummaryTitle } from '@lobechat/prompts';
-import { TraceNameMap, type UIChatMessage } from '@lobechat/types';
+import {
+  type ChatTopicMetadata,
+  type MessageMapScope,
+  TraceNameMap,
+  type UIChatMessage,
+} from '@lobechat/types';
 import isEqual from 'fast-deep-equal';
 import { t } from 'i18next';
 import useSWR, { type SWRResponse } from 'swr';
@@ -33,6 +38,33 @@ const n = setNamespace('t');
 
 const SWR_USE_FETCH_TOPIC = 'SWR_USE_FETCH_TOPIC';
 const SWR_USE_SEARCH_TOPIC = 'SWR_USE_SEARCH_TOPIC';
+type CronTopicsGroupWithJobInfo = {
+  cronJob: unknown;
+  cronJobId: string;
+  topics: ChatTopic[];
+};
+
+/**
+ * Options for switchTopic action
+ */
+export interface SwitchTopicOptions {
+  /**
+   * Clear the _new key data even when switching to an existing topic
+   * This is useful when creating a new topic, where the _new key data should be cleared
+   * @default false
+   */
+  clearNewKey?: boolean;
+  /**
+   * Explicit scope for clearing new key data
+   * If not provided, will be inferred from store state (activeGroupId)
+   */
+  scope?: MessageMapScope;
+  /**
+   * Skip refreshing messages after switching topic
+   * @default false
+   */
+  skipRefreshMessage?: boolean;
+}
 
 export interface ChatTopicAction {
   closeAllTopicsDrawer: () => void;
@@ -53,12 +85,24 @@ export interface ChatTopicAction {
   autoRenameTopicTitle: (id: string) => Promise<void>;
   duplicateTopic: (id: string) => Promise<void>;
   summaryTopicTitle: (topicId: string, messages: UIChatMessage[]) => Promise<void>;
-  switchTopic: (id?: string, skipRefreshMessage?: boolean) => Promise<void>;
+  /**
+   * Switch to a topic or create new topic state
+   * @param id - Topic ID to switch to, or null to switch to "new" state (clears _new key data)
+   * @param options - Options object for configuring the switch behavior
+   */
+  switchTopic: (id?: string | null, options?: SwitchTopicOptions) => Promise<void>;
+  /**
+   * Update topic metadata
+   * @param id - Topic ID to update
+   * @param metadata - Partial metadata to merge with existing metadata
+   */
+  updateTopicMetadata: (id: string, metadata: Partial<ChatTopicMetadata>) => Promise<void>;
   updateTopicTitle: (id: string, title: string) => Promise<void>;
   useFetchTopics: (
     enable: boolean,
     params: {
       agentId?: string;
+      excludeTriggers?: string[];
       groupId?: string;
       isInbox?: boolean;
       pageSize?: number;
@@ -113,7 +157,7 @@ export const chatTopic: StateCreator<
     const { switchTopic, saveToTopic, refreshMessages, activeTopicId } = get();
     const hasTopic = !!activeTopicId;
 
-    if (hasTopic) switchTopic();
+    if (hasTopic) switchTopic(null);
     else {
       await saveToTopic();
       refreshMessages();
@@ -250,7 +294,50 @@ export const chatTopic: StateCreator<
     });
   },
   favoriteTopic: async (id, favorite) => {
+    const { activeAgentId } = get();
     await get().internal_updateTopic(id, { favorite });
+
+    if (!activeAgentId) return;
+
+    await mutate(
+      ['cronTopicsWithJobInfo', activeAgentId],
+      (groups?: CronTopicsGroupWithJobInfo[]) => {
+        if (!Array.isArray(groups)) return groups;
+
+        let updated = false;
+        const next = groups.map((group) => {
+          let groupUpdated = false;
+          const topics = Array.isArray(group.topics)
+            ? group.topics.map((topic) => {
+                if (topic.id !== id) return topic;
+                if (topic.favorite === favorite) return topic;
+                groupUpdated = true;
+                updated = true;
+                return { ...topic, favorite };
+              })
+            : [];
+
+          return groupUpdated ? { ...group, topics } : group;
+        });
+
+        return updated ? next : groups;
+      },
+      { revalidate: false },
+    );
+  },
+
+  updateTopicMetadata: async (id, metadata) => {
+    const topic = topicSelectors.getTopicById(id)(get());
+    if (!topic) return;
+
+    // Optimistic update with merged metadata
+    const mergedMetadata = { ...topic.metadata, ...metadata };
+    get().internal_dispatchTopic({ type: 'updateTopic', id, value: { metadata: mergedMetadata } });
+
+    get().internal_updateTopicLoading(id, true);
+    await topicService.updateTopicMetadata(id, metadata);
+    await get().refreshTopic();
+    get().internal_updateTopicLoading(id, false);
   },
 
   updateTopicTitle: async (id, title) => {
@@ -268,15 +355,28 @@ export const chatTopic: StateCreator<
   },
 
   // query
-  useFetchTopics: (enable, { agentId, groupId, pageSize: customPageSize, isInbox }) => {
+  useFetchTopics: (
+    enable,
+    { agentId, excludeTriggers, groupId, pageSize: customPageSize, isInbox },
+  ) => {
     const pageSize = customPageSize || 20;
+    const effectiveExcludeTriggers =
+      excludeTriggers && excludeTriggers.length > 0 ? excludeTriggers : undefined;
     // Use topicMapKey to generate the container key for topic data map
     const containerKey = topicMapKey({ agentId, groupId });
     const hasValidContainer = !!(groupId || agentId);
 
     return useClientDataSWRWithSync<{ items: ChatTopic[]; total: number }>(
       enable && hasValidContainer
-        ? [SWR_USE_FETCH_TOPIC, containerKey, { isInbox, pageSize }]
+        ? [
+            SWR_USE_FETCH_TOPIC,
+            containerKey,
+            {
+              isInbox,
+              pageSize,
+              ...(effectiveExcludeTriggers ? { excludeTriggers: effectiveExcludeTriggers } : {}),
+            },
+          ]
         : null,
       async () => {
         // agentId, groupId, isInbox, pageSize come from the outer scope closure
@@ -297,6 +397,7 @@ export const chatTopic: StateCreator<
         const result = await topicService.getTopics({
           agentId,
           current: 0,
+          excludeTriggers: effectiveExcludeTriggers,
           groupId,
           isInbox,
           pageSize,
@@ -328,6 +429,7 @@ export const chatTopic: StateCreator<
                 ...get().topicDataMap,
                 [containerKey]: {
                   currentPage: 0,
+                  excludeTriggers: effectiveExcludeTriggers,
                   hasMore,
                   isExpandingPageSize: false,
                   items: topics,
@@ -367,9 +469,11 @@ export const chatTopic: StateCreator<
 
     try {
       const pageSize = useGlobalStore.getState().status.topicPageSize || 20;
+      const excludeTriggers = currentData?.excludeTriggers;
       const result = await topicService.getTopics({
         agentId: activeAgentId,
         current: nextPage,
+        excludeTriggers,
         groupId: activeGroupId,
         pageSize,
       });
@@ -383,6 +487,7 @@ export const chatTopic: StateCreator<
             ...get().topicDataMap,
             [key]: {
               currentPage: nextPage,
+              excludeTriggers,
               hasMore,
               isLoadingMore: false,
               items: [...currentTopics, ...result.items],
@@ -423,14 +528,40 @@ export const chatTopic: StateCreator<
       },
     ),
 
-  switchTopic: async (id, skipRefreshMessage) => {
+  switchTopic: async (id, options) => {
+    const opts = options ?? {};
+
+    const { activeAgentId, activeGroupId } = get();
+
+    // Clear the _new key data in the following cases:
+    // 1. When id is null or undefined (switching to empty topic state)
+    // 2. When clearNewKey option is explicitly true
+    // This prevents stale data from previous conversations showing up
+    // Note: Use == null to match both null and undefined
+    const shouldClearNewKey = !id || opts.clearNewKey;
+
+    if (shouldClearNewKey && activeAgentId) {
+      // Determine scope: use explicit scope from options, or infer from activeGroupId
+      const scope = opts.scope ?? (activeGroupId ? 'group' : 'main');
+
+      get().replaceMessages([], {
+        context: {
+          agentId: activeAgentId,
+          groupId: activeGroupId,
+          scope,
+          topicId: null,
+        },
+        action: n('clearNewKeyData'),
+      });
+    }
+
     set(
       { activeTopicId: !id ? (null as any) : id, activeThreadId: undefined },
       false,
       n('toggleTopic'),
     );
 
-    if (skipRefreshMessage) return;
+    if (opts.skipRefreshMessage) return;
     await get().refreshMessages();
   },
   // delete
@@ -438,11 +569,11 @@ export const chatTopic: StateCreator<
     const { switchTopic, activeAgentId, refreshTopic } = get();
     if (!activeAgentId) return;
 
-    await topicService.removeTopics(activeAgentId);
+    await topicService.removeTopicsByAgentId(activeAgentId);
     await refreshTopic();
 
     // switch to default topic
-    switchTopic();
+    switchTopic(null);
   },
 
   removeGroupTopics: async (groupId: string) => {
@@ -460,7 +591,7 @@ export const chatTopic: StateCreator<
     await refreshTopic();
 
     // switch to default topic
-    switchTopic();
+    switchTopic(null);
   },
   removeAllTopics: async () => {
     const { refreshTopic } = get();
@@ -478,7 +609,7 @@ export const chatTopic: StateCreator<
     await refreshTopic();
 
     // switch back to default topic
-    if (activeTopicId === id) switchTopic();
+    if (activeTopicId === id) switchTopic(null);
   },
   removeUnstarredTopic: async () => {
     const { refreshTopic, switchTopic } = get();
@@ -487,8 +618,8 @@ export const chatTopic: StateCreator<
     await topicService.batchRemoveTopics(topics.map((t) => t.id));
     await refreshTopic();
 
-    // 切换到默认 topic
-    switchTopic();
+    // Switch to default topic
+    switchTopic(null);
   },
 
   // Internal process method of the topics

@@ -15,6 +15,7 @@ export interface ModelParamsContext {
  * Extended parameters for model runtime
  */
 export interface ModelExtendParams {
+  effort?: string;
   enabledContextCaching?: boolean;
   imageAspectRatio?: string;
   imageResolution?: string;
@@ -77,6 +78,13 @@ export const resolveModelExtendParams = (ctx: ModelParamsContext): ModelExtendPa
     };
   }
 
+  // Adaptive thinking (Claude Opus 4.6)
+  if (modelExtendParams.includes('enableAdaptiveThinking')) {
+    extendParams.thinking = {
+      type: chatConfig.enableAdaptiveThinking ? 'adaptive' : 'disabled',
+    };
+  }
+
   // Context caching
   if (modelExtendParams.includes('disableContextCaching') && chatConfig.disableContextCaching) {
     extendParams.enabledContextCaching = false;
@@ -93,6 +101,21 @@ export const resolveModelExtendParams = (ctx: ModelParamsContext): ModelExtendPa
 
   if (modelExtendParams.includes('gpt5_1ReasoningEffort') && chatConfig.gpt5_1ReasoningEffort) {
     extendParams.reasoning_effort = chatConfig.gpt5_1ReasoningEffort;
+  }
+
+  if (modelExtendParams.includes('gpt5_2ReasoningEffort') && chatConfig.gpt5_2ReasoningEffort) {
+    extendParams.reasoning_effort = chatConfig.gpt5_2ReasoningEffort;
+  }
+
+  if (
+    modelExtendParams.includes('gpt5_2ProReasoningEffort') &&
+    chatConfig.gpt5_2ProReasoningEffort
+  ) {
+    extendParams.reasoning_effort = chatConfig.gpt5_2ProReasoningEffort;
+  }
+
+  if (modelExtendParams.includes('effort') && chatConfig.effort) {
+    extendParams.effort = chatConfig.effort;
   }
 
   // Text verbosity

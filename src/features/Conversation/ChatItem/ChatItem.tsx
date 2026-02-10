@@ -16,6 +16,7 @@ const ChatItem = memo<ChatItemProps>(
   ({
     onAvatarClick,
     avatarProps,
+    customAvatarRender,
     actions,
     className,
     loading,
@@ -38,7 +39,7 @@ const ChatItem = memo<ChatItemProps>(
     disabled = false,
     id,
     style,
-    newScreen,
+    newScreenMinHeight,
     ...rest
   }) => {
     const isUser = placement === 'right';
@@ -48,18 +49,26 @@ const ChatItem = memo<ChatItemProps>(
       <ErrorContent customErrorRender={customErrorRender} error={error} id={id} />
     );
 
+    const avatarContent = (
+      <Avatar
+        alt={avatarProps?.alt || avatar.title || 'avatar'}
+        loading={loading}
+        onClick={onAvatarClick}
+        shape={'square'}
+        {...avatarProps}
+        avatar={avatar}
+      />
+    );
+
     return (
       <Flexbox
         align={isUser ? 'flex-end' : 'flex-start'}
-        className={cx(
-          'message-wrapper',
-          styles.container,
-          newScreen && styles.newScreen,
-          className,
-        )}
+        className={cx('message-wrapper', styles.container, className)}
+        data-message-id={id}
         gap={8}
         paddingBlock={8}
         style={{
+          minHeight: newScreenMinHeight,
           paddingInlineStart: isUser ? 36 : 0,
           ...style,
         }}
@@ -71,16 +80,8 @@ const ChatItem = memo<ChatItemProps>(
           direction={isUser ? 'horizontal-reverse' : 'horizontal'}
           gap={8}
         >
-          {showAvatar && (
-            <Avatar
-              alt={avatarProps?.alt || avatar.title || 'avatar'}
-              loading={loading}
-              onClick={onAvatarClick}
-              shape={'square'}
-              {...avatarProps}
-              avatar={avatar}
-            />
-          )}
+          {showAvatar &&
+            (customAvatarRender ? customAvatarRender(avatar, avatarContent) : avatarContent)}
           <Title avatar={avatar} showTitle={showTitle} time={time} titleAddon={titleAddon} />
         </Flexbox>
         <Flexbox

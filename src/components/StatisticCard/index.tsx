@@ -2,11 +2,10 @@ import {
   StatisticCard as AntdStatisticCard,
   type StatisticCardProps as AntdStatisticCardProps,
 } from '@ant-design/pro-components';
-import { Text } from '@lobehub/ui';
+import { Block, BlockProps, Text } from '@lobehub/ui';
 import { Spin } from 'antd';
-import { createStaticStyles, cx, responsive, useResponsive, useThemeMode } from 'antd-style';
-import { adjustHue } from 'polished';
-import { type CSSProperties, memo, useMemo } from 'react';
+import { createStaticStyles, cx, responsive, useResponsive } from 'antd-style';
+import { memo } from 'react';
 
 const prefixCls = 'ant';
 
@@ -49,7 +48,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
         position: relative;
         width: 100%;
         padding-block-end: 16px;
-        padding-inline: 24px;
+        padding-inline: 16px;
         .${prefixCls}-pro-statistic-card-chart {
           position: relative;
           width: 100%;
@@ -68,12 +67,12 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 
     .${prefixCls}-pro-card-loading-content {
       padding-block: 16px;
-      padding-inline: 24px;
+      padding-inline: 16px;
     }
 
     .${prefixCls}-pro-card-header {
-      padding-block-start: 16px;
-      padding-inline: 24px;
+      padding-block-start: 0;
+      padding-inline: 0;
 
       .${prefixCls}-pro-card-title {
         line-height: 32px;
@@ -107,10 +106,9 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
       display: flex;
       flex-direction: column;
       gap: 16px;
-      ${responsive.sm} {
-        padding-block-end: 0 !important;
-        padding-inline: 0 !important;
-      }
+
+      padding-block-end: 0 !important;
+      padding-inline: 0 !important;
     }
 
     .${prefixCls}-pro-statistic-card-content-horizontal {
@@ -120,47 +118,6 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
       .${prefixCls}-pro-statistic-card-chart {
         align-self: center;
       }
-    }
-  `,
-  highlight: css`
-    overflow: hidden;
-
-    &::before {
-      content: '';
-
-      position: absolute;
-      z-index: 0;
-      inset-block-end: -30%;
-      inset-inline-end: -30%;
-      transform: rotate(-15deg);
-
-      width: 66%;
-      height: 50%;
-      border-radius: 50%;
-
-      background-image: linear-gradient(
-        60deg,
-        var(--highlight-adjusted, #000) 20%,
-        var(--highlight-color, #000) 80%
-      );
-      background-repeat: no-repeat;
-      background-position: center left;
-      background-size: contain;
-      filter: blur(32px);
-    }
-
-    > div {
-      z-index: 1;
-    }
-  `,
-  highlightDark: css`
-    &::before {
-      opacity: 1;
-    }
-  `,
-  highlightLight: css`
-    &::before {
-      opacity: 0.33;
     }
   `,
   icon: css`
@@ -173,64 +130,63 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   `,
 }));
 
-interface StatisticCardProps extends AntdStatisticCardProps {
-  highlight?: string;
-  variant?: 'raw' | 'card';
-}
+interface StatisticCardProps
+  extends
+    AntdStatisticCardProps,
+    Pick<BlockProps, 'variant' | 'padding' | 'paddingBlock' | 'paddingInline'> {}
 
 const StatisticCard = memo<StatisticCardProps>(
-  ({ title, className, highlight, variant, loading, extra, ...rest }) => {
-    const { isDarkMode } = useThemeMode();
-    const { mobile } = useResponsive();
-    const isPure = variant === 'raw';
+  ({
+    title,
+    className,
 
-    const highlightStyles = useMemo<CSSProperties>(
-      () =>
-        highlight
-          ? ({
-              '--highlight-adjusted': adjustHue(-30, highlight),
-              '--highlight-color': highlight,
-            } as CSSProperties)
-          : {},
-      [highlight],
-    );
+    variant = 'borderless',
+    loading,
+    extra,
+    style,
+    padding,
+    paddingBlock,
+    paddingInline,
+    ...rest
+  }) => {
+    const { mobile } = useResponsive();
 
     return (
-      <AntdStatisticCard
-        bordered={!mobile}
-        className={cx(
-          styles.container,
-          isPure ? styles.raw : cx(styles.card, isDarkMode ? styles.cardDark : styles.cardLight),
-          highlight &&
-            cx(styles.highlight, isDarkMode ? styles.highlightDark : styles.highlightLight),
-          className,
-        )}
-        extra={loading ? <Spin percent={'auto'} size={'small'} /> : extra}
-        style={{
-          ...highlightStyles,
-          ...rest.style,
-        }}
-        title={
-          typeof title === 'string' ? (
-            <Text
-              as={'h2'}
-              ellipsis={{ rows: 1, tooltip: true }}
-              style={{
-                fontSize: 'inherit',
-                fontWeight: 'inherit',
-                lineHeight: 'inherit',
-                margin: 0,
-                overflow: 'hidden',
-              }}
-            >
-              {title}
-            </Text>
-          ) : (
-            title
-          )
-        }
-        {...rest}
-      />
+      <Block
+        className={className}
+        flex={1}
+        padding={padding}
+        paddingBlock={paddingBlock}
+        paddingInline={paddingInline}
+        style={style}
+        variant={variant}
+      >
+        <AntdStatisticCard
+          bordered={!mobile}
+          className={cx(styles.container, styles.raw)}
+          extra={loading ? <Spin percent={'auto'} size={'small'} /> : extra}
+          title={
+            typeof title === 'string' ? (
+              <Text
+                as={'h2'}
+                ellipsis={{ rows: 1, tooltip: true }}
+                style={{
+                  fontSize: 'inherit',
+                  fontWeight: 'inherit',
+                  lineHeight: 'inherit',
+                  margin: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                {title}
+              </Text>
+            ) : (
+              title
+            )
+          }
+          {...rest}
+        />
+      </Block>
     );
   },
 );

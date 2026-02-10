@@ -14,9 +14,6 @@ export const GTDApiName = {
   /** Clear completed or all todos */
   clearTodos: 'clearTodos',
 
-  /** Mark todo items as done by indices */
-  completeTodos: 'completeTodos',
-
   // ==================== Planning ====================
   /** Create a structured plan by breaking down a goal into actionable steps */
   createPlan: 'createPlan',
@@ -24,13 +21,17 @@ export const GTDApiName = {
   /** Create new todo items */
   createTodos: 'createTodos',
 
-  /** Remove todo items by indices */
-  removeTodos: 'removeTodos',
+  // ==================== Async Tasks ====================
+  /** Execute a single async task */
+  execTask: 'execTask',
+
+  /** Execute one or more async tasks */
+  execTasks: 'execTasks',
 
   /** Update an existing plan */
   updatePlan: 'updatePlan',
 
-  /** Update todo items with batch operations (add, update, remove, complete) */
+  /** Update todo items with batch operations (add, update, remove, complete, processing) */
   updateTodos: 'updateTodos',
 } as const;
 
@@ -38,17 +39,30 @@ export type GTDApiNameType = (typeof GTDApiName)[keyof typeof GTDApiName];
 
 // ==================== Todo Item ====================
 
+/** Status of a todo item */
+export type TodoStatus = 'todo' | 'processing' | 'completed';
+
 export interface TodoItem {
-  /** Whether the item is completed */
-  completed: boolean;
+  /** Status of the todo item */
+  status: TodoStatus;
   /** The todo item text */
   text: string;
 }
+
+/** Get the next status in the cycle: todo → processing → completed → todo */
+export const getNextTodoStatus = (current: TodoStatus): TodoStatus => {
+  const cycle: TodoStatus[] = ['todo', 'processing', 'completed'];
+  const index = cycle.indexOf(current);
+  return cycle[(index + 1) % cycle.length];
+};
 
 export interface TodoList {
   items: TodoItem[];
   updatedAt: string;
 }
+
+/** Alias for TodoList, used for state storage in Plan metadata */
+export type TodoState = TodoList;
 
 // ==================== Todo Params ====================
 
@@ -67,18 +81,18 @@ export interface CreateTodosParams {
 /**
  * Update operation types for batch updates
  */
-export type TodoUpdateOperationType = 'add' | 'update' | 'remove' | 'complete';
+export type TodoUpdateOperationType = 'add' | 'update' | 'remove' | 'complete' | 'processing';
 
 /**
  * Single update operation
  */
 export interface TodoUpdateOperation {
-  /** For 'update': the new completed status */
-  completed?: boolean;
-  /** For 'update', 'remove', 'complete': the index of the item (0-based) */
+  /** For 'update', 'remove', 'complete', 'processing': the index of the item (0-based) */
   index?: number;
   /** For 'update': the new text */
   newText?: string;
+  /** For 'update': the new status */
+  status?: TodoStatus;
   /** For 'add': the text to add */
   text?: string;
   /** Operation type */
@@ -87,27 +101,11 @@ export interface TodoUpdateOperation {
 
 /**
  * Update todo list with batch operations
- * Supports: add, update, remove, complete
+ * Supports: add, update, remove, complete, processing
  */
 export interface UpdateTodosParams {
   /** Array of update operations to apply */
   operations: TodoUpdateOperation[];
-}
-
-/**
- * Mark todo items as completed by indices
- */
-export interface CompleteTodosParams {
-  /** Indices of items to mark as completed (0-based) */
-  indices: number[];
-}
-
-/**
- * Remove todo items by indices
- */
-export interface RemoveTodosParams {
-  /** Indices of items to remove (0-based) */
-  indices: number[];
 }
 
 /**
@@ -228,4 +226,108 @@ export interface CreatePlanState {
 export interface UpdatePlanState {
   /** The updated plan document */
   plan: Plan;
+}
+
+// ==================== Async Tasks Types ====================
+
+/**
+ * Single task item for execution
+ */
+export interface ExecTaskItem {
+  /** Brief description of what this task does (shown in UI) */
+  description: string;
+  /** Whether to inherit context messages from parent conversation */
+  inheritMessages?: boolean;
+  /** Detailed instruction/prompt for the task execution */
+  instruction: string;
+  /**
+   * Whether to execute the task on the client side (desktop only).
+   * When true and running on desktop, the task will be executed locally
+   * with access to local tools (file system, shell commands, etc.).
+   *
+   * MUST be true when task requires local-system tools.
+   */
+  runInClient?: boolean;
+  /** Timeout in milliseconds (optional, default 30 minutes) */
+  timeout?: number;
+}
+
+/**
+ * Parameters for execTask API
+ * Execute a single async task
+ */
+export interface ExecTaskParams {
+  /** Brief description of what this task does (shown in UI) */
+  description: string;
+  /** Whether to inherit context messages from parent conversation */
+  inheritMessages?: boolean;
+  /** Detailed instruction/prompt for the task execution */
+  instruction: string;
+  /**
+   * Whether to execute the task on the client side (desktop only).
+   * When true and running on desktop, the task will be executed locally
+   * with access to local tools (file system, shell commands, etc.).
+   *
+   * MUST be true when task requires local-system tools.
+   */
+  runInClient?: boolean;
+  /** Timeout in milliseconds (optional, default 30 minutes) */
+  timeout?: number;
+}
+
+/**
+ * Parameters for execTasks API
+ * Execute one or more async tasks
+ */
+export interface ExecTasksParams {
+  /** Array of tasks to execute */
+  tasks: ExecTaskItem[];
+}
+
+/**
+ * State returned after triggering exec_task (server-side)
+ */
+export interface ExecTaskState {
+  /** Parent message ID (tool message) */
+  parentMessageId: string;
+  /** The task definition that was triggered */
+  task: ExecTaskItem;
+  /** Type identifier for render component */
+  type: 'execTask';
+}
+
+/**
+ * State returned after triggering exec_tasks (server-side)
+ */
+export interface ExecTasksState {
+  /** Parent message ID (tool message) */
+  parentMessageId: string;
+  /** Array of task definitions that were triggered */
+  tasks: ExecTaskItem[];
+  /** Type identifier for render component */
+  type: 'execTasks';
+}
+
+/**
+ * State returned after triggering exec_client_task (client-side, desktop only)
+ */
+export interface ExecClientTaskState {
+  /** Parent message ID (tool message) */
+  parentMessageId: string;
+  /** The task definition that was triggered */
+  task: ExecTaskItem;
+  /** Type identifier for render component */
+  type: 'execClientTask';
+}
+
+/**
+ * State returned after triggering exec_client_tasks (client-side, desktop only)
+ */
+export interface ExecClientTasksState {
+  /** Parent message ID (tool message) */
+  parentMessageId: string;
+  /** Array of task definitions that were triggered */
+  tasks: ExecTaskItem[];
+  /** Type identifier for render component */
+  type: 'execClientTasks';
 }

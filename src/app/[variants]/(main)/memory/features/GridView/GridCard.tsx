@@ -32,6 +32,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 interface GridCardProps {
   actions?: ReactNode;
   badges?: ReactNode;
+  capturedAt?: Date | number | string;
   cate?: string | null;
   children?: ReactNode;
   footer?: ReactNode;
@@ -39,7 +40,6 @@ interface GridCardProps {
   onClick?: () => void;
   title?: ReactNode;
   titleAddon?: ReactNode;
-  updatedAt?: Date | number | string;
 }
 
 const GridCard = memo<GridCardProps>(
@@ -53,7 +53,7 @@ const GridCard = memo<GridCardProps>(
     hashTags,
     badges,
     footer,
-    updatedAt,
+    capturedAt,
   }) => {
     const cateColor = useCateColor(cate);
     return (
@@ -123,7 +123,7 @@ const GridCard = memo<GridCardProps>(
             }}
           >
             {footer}
-            <Time updatedAt={updatedAt} />
+            <Time capturedAt={capturedAt} />
           </Flexbox>
         </Block>
         <Flexbox

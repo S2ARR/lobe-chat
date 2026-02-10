@@ -155,7 +155,7 @@ describe('Generation Actions', () => {
   });
 
   describe('continueGeneration', () => {
-    it('should continue generation from message with context including groupId', async () => {
+    it('should continue generation from assistantGroup message with last child as blockId', async () => {
       // Reset mock to ensure all required functions are available
       vi.mocked(await import('@/store/chat').then((m) => m.useChatStore.getState)).mockReturnValue({
         messagesMap: {},
@@ -175,7 +175,64 @@ describe('Generation Actions', () => {
 
       const store = createStore({ context });
 
-      // Set displayMessages after store creation
+      // Set displayMessages with assistantGroup message containing children
+      act(() => {
+        store.setState({
+          displayMessages: [
+            {
+              id: 'group-msg-1',
+              role: 'assistantGroup',
+              content: '',
+              children: [
+                { id: 'child-1', content: 'First response' },
+                { id: 'child-2', content: 'Second response' },
+              ],
+            },
+          ],
+        } as any);
+      });
+
+      await act(async () => {
+        await store.getState().continueGeneration('group-msg-1');
+      });
+
+      // Should create operation with groupMessageId
+      expect(mockStartOperation).toHaveBeenCalledWith({
+        context: { ...context, messageId: 'group-msg-1' },
+        type: 'continue',
+      });
+
+      // Should call internal_execAgentRuntime with last child id as parentMessageId
+      expect(mockInternalExecAgentRuntime).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context,
+          parentMessageId: 'child-2', // last child's id
+          parentMessageType: 'assistantGroup',
+          parentOperationId: 'test-op-id',
+        }),
+      );
+    });
+
+    it('should not continue if message is not assistantGroup', async () => {
+      // Reset mock to ensure all required functions are available
+      vi.mocked(await import('@/store/chat').then((m) => m.useChatStore.getState)).mockReturnValue({
+        messagesMap: {},
+        operations: {},
+        startOperation: mockStartOperation,
+        completeOperation: mockCompleteOperation,
+        failOperation: mockFailOperation,
+        internal_execAgentRuntime: mockInternalExecAgentRuntime,
+      } as any);
+
+      const context: ConversationContext = {
+        agentId: 'session-1',
+        topicId: null,
+        threadId: null,
+      };
+
+      const store = createStore({ context });
+
+      // Set displayMessages with regular assistant message (not assistantGroup)
       act(() => {
         store.setState({
           displayMessages: [{ id: 'msg-1', role: 'assistant', content: 'Hello' }],
@@ -186,21 +243,46 @@ describe('Generation Actions', () => {
         await store.getState().continueGeneration('msg-1');
       });
 
-      // Should create operation with context including groupId
-      expect(mockStartOperation).toHaveBeenCalledWith({
-        context: { ...context, messageId: 'msg-1' },
-        type: 'continue',
+      // Should not create operation if message is not assistantGroup
+      expect(mockStartOperation).not.toHaveBeenCalled();
+      expect(mockInternalExecAgentRuntime).not.toHaveBeenCalled();
+    });
+
+    it('should not continue if assistantGroup has no children', async () => {
+      // Reset mock to ensure all required functions are available
+      vi.mocked(await import('@/store/chat').then((m) => m.useChatStore.getState)).mockReturnValue({
+        messagesMap: {},
+        operations: {},
+        startOperation: mockStartOperation,
+        completeOperation: mockCompleteOperation,
+        failOperation: mockFailOperation,
+        internal_execAgentRuntime: mockInternalExecAgentRuntime,
+      } as any);
+
+      const context: ConversationContext = {
+        agentId: 'session-1',
+        topicId: null,
+        threadId: null,
+      };
+
+      const store = createStore({ context });
+
+      // Set displayMessages with assistantGroup but no children
+      act(() => {
+        store.setState({
+          displayMessages: [
+            { id: 'group-msg-1', role: 'assistantGroup', content: '', children: [] },
+          ],
+        } as any);
       });
 
-      // Should call internal_execAgentRuntime with context including groupId
-      expect(mockInternalExecAgentRuntime).toHaveBeenCalledWith(
-        expect.objectContaining({
-          context,
-          parentMessageId: 'msg-1',
-          parentMessageType: 'assistant',
-          parentOperationId: 'test-op-id',
-        }),
-      );
+      await act(async () => {
+        await store.getState().continueGeneration('group-msg-1');
+      });
+
+      // Should not create operation if no children
+      expect(mockStartOperation).not.toHaveBeenCalled();
+      expect(mockInternalExecAgentRuntime).not.toHaveBeenCalled();
     });
 
     it('should call onBeforeContinue hook and respect false return', async () => {
@@ -225,18 +307,25 @@ describe('Generation Actions', () => {
 
       const store = createStore({ context, hooks });
 
-      // Set displayMessages after store creation
+      // Set displayMessages with assistantGroup
       act(() => {
         store.setState({
-          displayMessages: [{ id: 'msg-1', role: 'assistant', content: 'Hello' }],
+          displayMessages: [
+            {
+              id: 'group-msg-1',
+              role: 'assistantGroup',
+              content: '',
+              children: [{ id: 'child-1', content: 'Response' }],
+            },
+          ],
         } as any);
       });
 
       await act(async () => {
-        await store.getState().continueGeneration('msg-1');
+        await store.getState().continueGeneration('group-msg-1');
       });
 
-      expect(onBeforeContinue).toHaveBeenCalledWith('msg-1');
+      expect(onBeforeContinue).toHaveBeenCalledWith('group-msg-1');
       // Should not call internal_execAgentRuntime if hook returns false
       expect(mockInternalExecAgentRuntime).not.toHaveBeenCalled();
     });
@@ -263,18 +352,25 @@ describe('Generation Actions', () => {
 
       const store = createStore({ context, hooks });
 
-      // Set displayMessages after store creation
+      // Set displayMessages with assistantGroup
       act(() => {
         store.setState({
-          displayMessages: [{ id: 'msg-1', role: 'assistant', content: 'Hello' }],
+          displayMessages: [
+            {
+              id: 'group-msg-1',
+              role: 'assistantGroup',
+              content: '',
+              children: [{ id: 'child-1', content: 'Response' }],
+            },
+          ],
         } as any);
       });
 
       await act(async () => {
-        await store.getState().continueGeneration('msg-1');
+        await store.getState().continueGeneration('group-msg-1');
       });
 
-      expect(onContinueComplete).toHaveBeenCalledWith('msg-1');
+      expect(onContinueComplete).toHaveBeenCalledWith('group-msg-1');
     });
 
     it('should not continue if message is not found', async () => {
@@ -366,6 +462,122 @@ describe('Generation Actions', () => {
       // Should complete operation
       expect(mockCompleteOperation).toHaveBeenCalledWith('test-op-id');
     });
+
+    it('should delete message BEFORE regeneration to prevent message not found issue (LOBE-2533)', async () => {
+      // This test verifies the fix for LOBE-2533:
+      // When "delete and regenerate" is called, if regeneration happens first,
+      // it switches to a new branch, causing the original message to no longer
+      // appear in displayMessages. Then deleteMessage cannot find the message
+      // and fails silently.
+      //
+      // The fix: delete first, then regenerate.
+
+      const callOrder: string[] = [];
+
+      // Re-setup mock to track call order
+      const { useChatStore } = await import('@/store/chat');
+      vi.mocked(useChatStore.getState).mockReturnValue({
+        messagesMap: {},
+        operations: {},
+        messageLoadingIds: [],
+        cancelOperations: mockCancelOperations,
+        cancelOperation: mockCancelOperation,
+        deleteMessage: vi.fn().mockImplementation(() => {
+          callOrder.push('deleteMessage');
+          return Promise.resolve();
+        }),
+        switchMessageBranch: vi.fn().mockImplementation(() => {
+          callOrder.push('switchMessageBranch');
+          return Promise.resolve();
+        }),
+        startOperation: mockStartOperation,
+        completeOperation: mockCompleteOperation,
+        failOperation: mockFailOperation,
+        internal_execAgentRuntime: vi.fn().mockImplementation(() => {
+          callOrder.push('internal_execAgentRuntime');
+          return Promise.resolve();
+        }),
+      } as any);
+
+      const context: ConversationContext = {
+        agentId: 'session-1',
+        topicId: 'topic-1',
+        threadId: null,
+        groupId: 'group-1',
+      };
+
+      const store = createStore({ context });
+
+      // Set displayMessages and dbMessages
+      act(() => {
+        store.setState({
+          displayMessages: [
+            { id: 'msg-1', role: 'user', content: 'Hello' },
+            { id: 'msg-2', role: 'assistant', content: 'Hi there', parentId: 'msg-1' },
+          ],
+          dbMessages: [
+            { id: 'msg-1', role: 'user', content: 'Hello' },
+            { id: 'msg-2', role: 'assistant', content: 'Hi there', parentId: 'msg-1' },
+          ],
+        } as any);
+      });
+
+      await act(async () => {
+        await store.getState().delAndRegenerateMessage('msg-2');
+      });
+
+      // CRITICAL: deleteMessage must be called BEFORE switchMessageBranch and internal_execAgentRuntime
+      // If regeneration (which calls switchMessageBranch) happens first, the message
+      // won't be found in displayMessages and deletion will fail silently.
+      expect(callOrder[0]).toBe('deleteMessage');
+      expect(callOrder).toContain('switchMessageBranch');
+      expect(callOrder).toContain('internal_execAgentRuntime');
+
+      // Verify deleteMessage is called before any regeneration-related calls
+      const deleteIndex = callOrder.indexOf('deleteMessage');
+      const switchIndex = callOrder.indexOf('switchMessageBranch');
+      const execIndex = callOrder.indexOf('internal_execAgentRuntime');
+
+      expect(deleteIndex).toBeLessThan(switchIndex);
+      expect(deleteIndex).toBeLessThan(execIndex);
+    });
+
+    it('should not proceed if assistant message has no parentId', async () => {
+      const { useChatStore } = await import('@/store/chat');
+      vi.mocked(useChatStore.getState).mockReturnValue({
+        messagesMap: {},
+        operations: {},
+        messageLoadingIds: [],
+        startOperation: mockStartOperation,
+        completeOperation: mockCompleteOperation,
+        deleteMessage: mockDeleteMessage,
+      } as any);
+
+      const context: ConversationContext = {
+        agentId: 'session-1',
+        topicId: null,
+        threadId: null,
+      };
+
+      const store = createStore({ context });
+
+      // Set displayMessages with assistant message that has no parentId
+      act(() => {
+        store.setState({
+          displayMessages: [
+            { id: 'msg-1', role: 'assistant', content: 'Hi there' }, // no parentId
+          ],
+        } as any);
+      });
+
+      await act(async () => {
+        await store.getState().delAndRegenerateMessage('msg-1');
+      });
+
+      // Should not proceed - no operation created, no delete called
+      expect(mockStartOperation).not.toHaveBeenCalled();
+      expect(mockDeleteMessage).not.toHaveBeenCalled();
+    });
   });
 
   describe('delAndResendThreadMessage', () => {
@@ -446,10 +658,16 @@ describe('Generation Actions', () => {
 
       const store = createStore({ context });
 
-      // Set displayMessages after store creation
+      // Set displayMessages and dbMessages after store creation
+      // dbMessages is used to calculate children count for branch index
       act(() => {
         store.setState({
           displayMessages: [{ id: 'msg-1', role: 'user', content: 'Hello', branch: { count: 2 } }],
+          dbMessages: [
+            { id: 'msg-1', role: 'user', content: 'Hello' },
+            { id: 'child-1', role: 'assistant', content: 'Response 1', parentId: 'msg-1' },
+            { id: 'child-2', role: 'assistant', content: 'Response 2', parentId: 'msg-1' },
+          ],
         } as any);
       });
 
@@ -464,6 +682,7 @@ describe('Generation Actions', () => {
       });
 
       // Should pass operationId to switchMessageBranch
+      // nextBranchIndex = childrenCount = 2 (two assistant messages with parentId: 'msg-1')
       expect(mockSwitchMessageBranch).toHaveBeenCalledWith('msg-1', 2, {
         operationId: 'test-op-id',
       });

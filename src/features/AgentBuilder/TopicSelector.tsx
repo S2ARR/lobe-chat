@@ -1,7 +1,5 @@
-import { ActionIcon, Flexbox } from '@lobehub/ui';
-import { Dropdown } from 'antd';
+import { ActionIcon, DropdownMenu, type DropdownMenuCheckboxItem, Flexbox } from '@lobehub/ui';
 import { createStaticStyles } from 'antd-style';
-import type { ItemType } from 'antd/es/menu/interface';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { Clock3Icon, PlusIcon } from 'lucide-react';
@@ -17,14 +15,15 @@ dayjs.extend(relativeTime);
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   time: css`
+    margin-inline-start: 6px;
     font-size: 12px;
     color: ${cssVar.colorTextTertiary};
-    margin-left: 6px;
   `,
   title: css`
+    overflow: hidden;
+
     font-size: 14px;
     font-weight: 500;
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   `,
@@ -38,7 +37,9 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
   const { t } = useTranslation('topic');
 
   // Fetch topics for the agent builder
-  useChatStore((s) => s.useFetchTopics)(true, { agentId });
+  const useFetchTopics = useChatStore((s) => s.useFetchTopics);
+
+  useFetchTopics(true, { agentId });
 
   const [activeTopicId, switchTopic, topics] = useChatStore((s) => [
     s.activeTopicId,
@@ -52,7 +53,7 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
     [topics, activeTopicId],
   );
 
-  const items = useMemo<ItemType[]>(
+  const items = useMemo<DropdownMenuCheckboxItem[]>(
     () =>
       (topics || []).map((topic) => {
         const displayTime =
@@ -61,6 +62,8 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
             : dayjs(topic.updatedAt).format('YYYY-MM-DD');
 
         return {
+          checked: topic.id === activeTopicId,
+          closeOnClick: true,
           key: topic.id,
           label: (
             <Flexbox align="center" gap={4} horizontal justify="space-between" width="100%">
@@ -68,11 +71,17 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
               <span className={styles.time}>{displayTime}</span>
             </Flexbox>
           ),
-          onClick: () => switchTopic(topic.id),
+          onCheckedChange: (checked) => {
+            if (checked) {
+              switchTopic(topic.id);
+            }
+          },
+          type: 'checkbox',
         };
       }),
-    [topics, switchTopic, styles],
+    [topics, switchTopic, styles, activeTopicId],
   );
+  const isEmpty = !topics || topics.length === 0;
 
   return (
     <NavHeader
@@ -87,19 +96,14 @@ const TopicSelector = memo<TopicSelectorProps>(({ agentId }) => {
             size={DESKTOP_HEADER_ICON_SIZE}
             title={t('actions.addNewTopic')}
           />
-          <Dropdown
-            disabled={!topics || topics.length === 0}
-            menu={{
-              items,
-              selectedKeys: activeTopicId ? [activeTopicId] : [],
-              style: { maxHeight: 400, overflowY: 'auto' },
-            }}
-            overlayStyle={{ minWidth: 280 }}
+          <DropdownMenu
+            items={items}
             placement="bottomRight"
-            trigger={['click']}
+            popupProps={{ style: { maxHeight: 400, minWidth: 280, overflowY: 'auto' } }}
+            triggerProps={{ disabled: isEmpty }}
           >
-            <ActionIcon disabled={!topics || topics.length === 0} icon={Clock3Icon} />
-          </Dropdown>
+            <ActionIcon disabled={isEmpty} icon={Clock3Icon} />
+          </DropdownMenu>
         </>
       }
       showTogglePanelButton={false}

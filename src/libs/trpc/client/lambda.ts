@@ -43,6 +43,13 @@ const errorHandlingLink: TRPCLink<LambdaRouter> = () => {
                   // Desktop app doesn't have the web auth routes like `/signin`,
                   // so skip the login redirect/notification there.
                   if (!isDesktop) {
+                    const { getUserStoreState } = await import('@/store/user/store');
+                    const { isSignedIn, logout } = getUserStoreState();
+                    // If user is still marked as signed in but got 401,
+                    // session is invalid - clear client state first
+                    if (isSignedIn) {
+                      await logout();
+                    }
                     const { loginRequired } =
                       await import('@/components/Error/loginRequiredNotification');
                     loginRequired.redirect();
@@ -70,15 +77,22 @@ const errorHandlingLink: TRPCLink<LambdaRouter> = () => {
 const linkOptions = {
   // eslint-disable-next-line no-undef
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Ensure credentials are included to send cookies (like mp_token)
+    // eslint-disable-next-line no-undef
+    const fetchOptions: RequestInit = {
+      ...init,
+      credentials: 'include',
+    };
+
     if (isDesktop) {
       // eslint-disable-next-line no-undef
-      const res = await fetch(input as string, init as RequestInit);
+      const res = await fetch(input as string, fetchOptions);
 
       if (res) return res;
     }
 
     // eslint-disable-next-line no-undef
-    return await fetch(input, init as RequestInit);
+    return await fetch(input, fetchOptions);
   },
   headers: async () => {
     // dynamic import to avoid circular dependency

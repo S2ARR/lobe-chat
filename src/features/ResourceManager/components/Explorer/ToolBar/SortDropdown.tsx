@@ -1,19 +1,16 @@
-import { Dropdown } from 'antd';
-import type { MenuProps } from 'antd';
+import { DropdownMenu, type DropdownMenuCheckboxItem } from '@lobehub/ui';
 import { ArrowDownAZ } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useQueryState } from '@/hooks/useQueryParam';
+import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/features/store';
 
 import ActionIconWithChevron from './ActionIconWithChevron';
 
 const SortDropdown = memo(() => {
   const { t } = useTranslation('components');
-  const [sorter, setSorter] = useQueryState('sorter', {
-    clearOnDefault: true,
-    defaultValue: 'createdAt',
-  });
+  const sorter = useResourceManagerStore((s) => s.sorter);
+  const setSorter = useResourceManagerStore((s) => s.setSorter);
 
   const sortOptions = useMemo(
     () => [
@@ -24,22 +21,34 @@ const SortDropdown = memo(() => {
     [t],
   );
 
-  const menuItems: MenuProps['items'] = sortOptions.map((option) => ({
-    key: option.key,
-    label: option.label,
-    onClick: () => setSorter(option.key),
-  }));
+  const selectedKey = sorter || 'createdAt';
+
+  const menuItems = useMemo<DropdownMenuCheckboxItem[]>(
+    () =>
+      sortOptions.map(
+        (option): DropdownMenuCheckboxItem => ({
+          checked: option.key === selectedKey,
+          closeOnClick: true,
+          key: option.key,
+          label: option.label,
+          onCheckedChange: (checked: boolean) => {
+            if (checked) {
+              setSorter(option.key as 'name' | 'createdAt' | 'size');
+            }
+          },
+          type: 'checkbox',
+        }),
+      ),
+    [selectedKey, setSorter, sortOptions],
+  );
 
   const currentSortLabel =
     sortOptions.find((option) => option.key === sorter)?.label || t('FileManager.sort.dateAdded');
 
   return (
-    <Dropdown
-      menu={{ items: menuItems, selectedKeys: [sorter || 'createdAt'] }}
-      trigger={['click']}
-    >
+    <DropdownMenu items={menuItems}>
       <ActionIconWithChevron icon={ArrowDownAZ} title={currentSortLabel} />
-    </Dropdown>
+    </DropdownMenu>
   );
 });
 

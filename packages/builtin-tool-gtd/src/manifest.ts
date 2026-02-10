@@ -1,5 +1,6 @@
 import type { BuiltinToolManifest } from '@lobechat/types';
 
+import { isDesktop } from './const';
 import { systemPrompt } from './systemRole';
 import { GTDApiName } from './types';
 
@@ -13,8 +14,8 @@ export const GTDManifest: BuiltinToolManifest = {
       description:
         'Create a high-level plan document. Plans define the strategic direction (the "what" and "why"), while todos handle the actionable steps.',
       name: GTDApiName.createPlan,
-      humanIntervention: 'always',
-      renderDisplayControl: 'alwaysExpand',
+      humanIntervention: 'required',
+      renderDisplayControl: 'expand',
       parameters: {
         properties: {
           goal: {
@@ -37,12 +38,13 @@ export const GTDManifest: BuiltinToolManifest = {
     },
     {
       description:
-        'Update an existing plan document. Use this to modify the goal, description, context, or mark the plan as completed.',
+        'Update an existing plan document. Only use this when the goal fundamentally changes. Plans should remain stable once created - do not update plans just because details change.',
       name: GTDApiName.updatePlan,
       parameters: {
         properties: {
           planId: {
-            description: 'The ID of the plan to update.',
+            description:
+              'The document ID of the plan to update (e.g., "docs_xxx"). This ID is returned in the createPlan response. Do NOT use the goal text as planId.',
             type: 'string',
           },
           goal: {
@@ -57,10 +59,6 @@ export const GTDManifest: BuiltinToolManifest = {
             description: 'Updated detailed context.',
             type: 'string',
           },
-          completed: {
-            description: 'Mark the plan as completed.',
-            type: 'boolean',
-          },
         },
         required: ['planId'],
         type: 'object',
@@ -71,8 +69,7 @@ export const GTDManifest: BuiltinToolManifest = {
     {
       description: 'Create new todo items. Pass an array of text strings.',
       name: GTDApiName.createTodos,
-      humanIntervention: 'always',
-      renderDisplayControl: 'expand',
+      humanIntervention: 'required',
       parameters: {
         properties: {
           adds: {
@@ -81,42 +78,50 @@ export const GTDManifest: BuiltinToolManifest = {
             type: 'array',
           },
         },
-        required: ['items'],
+        required: ['adds'],
         type: 'object',
       },
     },
     {
-      description:
-        'Update todo items with batch operations. Each operation specifies a type (add, update, remove, complete) and the relevant data.',
+      description: `Update todo items with batch operations. Each operation type requires specific fields:
+- "add": requires "text" (the todo text to add)
+- "update": requires "index", optional "newText" and/or "status"
+- "remove": requires "index" only
+- "complete": requires "index" only (marks item as completed)
+- "processing": requires "index" only (marks item as in progress)`,
       name: GTDApiName.updateTodos,
       renderDisplayControl: 'expand',
       parameters: {
         properties: {
           operations: {
-            description: 'Array of update operations to apply.',
+            description:
+              'Array of update operations. IMPORTANT: For "complete", "processing" and "remove" operations, only pass "type" and "index" - no other fields needed.',
             items: {
               properties: {
                 type: {
-                  description: 'Operation type: add, update, remove, or complete.',
-                  enum: ['add', 'update', 'remove', 'complete'],
+                  description:
+                    'Operation type. "add" needs text, "update" needs index + optional newText/status, "remove", "complete" and "processing" need index only.',
+                  enum: ['add', 'update', 'remove', 'complete', 'processing'],
                   type: 'string',
                 },
                 text: {
-                  description: 'For "add": the text to add.',
+                  description: 'Required for "add" only: the text to add.',
                   type: 'string',
                 },
                 index: {
                   description:
-                    'For "update", "remove", "complete": the index of the item (0-based).',
+                    'Required for "update", "remove", "complete", "processing": the item index (0-based).',
                   type: 'number',
                 },
                 newText: {
-                  description: 'For "update": the new text.',
+                  description: 'Optional for "update" only: the new text.',
                   type: 'string',
                 },
-                completed: {
-                  description: 'For "update": the new completed status.',
-                  type: 'boolean',
+                status: {
+                  description:
+                    'Optional for "update" only: set status (todo, processing, completed).',
+                  enum: ['todo', 'processing', 'completed'],
+                  type: 'string',
                 },
               },
               required: ['type'],
@@ -126,39 +131,6 @@ export const GTDManifest: BuiltinToolManifest = {
           },
         },
         required: ['operations'],
-        type: 'object',
-      },
-    },
-    {
-      description: 'Mark todo items as completed by their indices (0-based).',
-      name: GTDApiName.completeTodos,
-      renderDisplayControl: 'expand',
-      parameters: {
-        properties: {
-          indices: {
-            description: 'Array of item indices (0-based) to mark as completed.',
-            items: { type: 'number' },
-            type: 'array',
-          },
-        },
-        required: ['indices'],
-        type: 'object',
-      },
-    },
-    {
-      description: 'Remove todo items by their indices (0-based).',
-      name: GTDApiName.removeTodos,
-      humanIntervention: 'always',
-      renderDisplayControl: 'expand',
-      parameters: {
-        properties: {
-          indices: {
-            description: 'Array of item indices (0-based) to remove.',
-            items: { type: 'number' },
-            type: 'array',
-          },
-        },
-        required: ['indices'],
         type: 'object',
       },
     },
@@ -176,6 +148,88 @@ export const GTDManifest: BuiltinToolManifest = {
           },
         },
         required: ['mode'],
+        type: 'object',
+      },
+    },
+
+    // ==================== Async Tasks ====================
+    {
+      description:
+        'Execute a single long-running async task. The task runs in an isolated context and can take significant time to complete. Use this for a single complex operation that requires extended processing.',
+      name: GTDApiName.execTask,
+      parameters: {
+        properties: {
+          description: {
+            description: 'Brief description of what this task does (shown in UI).',
+            type: 'string',
+          },
+          instruction: {
+            description: 'Detailed instruction/prompt for the task execution.',
+            type: 'string',
+          },
+          inheritMessages: {
+            description:
+              'Whether to inherit context messages from the parent conversation. Default is false.',
+            type: 'boolean',
+          },
+          ...(isDesktop && {
+            runInClient: {
+              description:
+                'Whether to run on the desktop client (for local file/shell access). MUST be true when task requires local-system tools. Default is false (server execution).',
+              type: 'boolean',
+            },
+          }),
+          timeout: {
+            description: 'Optional timeout in milliseconds. Default is 30 minutes.',
+            type: 'number',
+          },
+        },
+        required: ['description', 'instruction'],
+        type: 'object',
+      },
+    },
+    {
+      description:
+        'Execute one or more long-running async tasks. Each task runs in an isolated context and can take significant time to complete. Use this for complex operations that require extended processing.',
+      name: GTDApiName.execTasks,
+      parameters: {
+        properties: {
+          tasks: {
+            description: 'Array of tasks to execute asynchronously.',
+            items: {
+              properties: {
+                description: {
+                  description: 'Brief description of what this task does (shown in UI).',
+                  type: 'string',
+                },
+                instruction: {
+                  description: 'Detailed instruction/prompt for the task execution.',
+                  type: 'string',
+                },
+                inheritMessages: {
+                  description:
+                    'Whether to inherit context messages from the parent conversation. Default is false.',
+                  type: 'boolean',
+                },
+                ...(isDesktop && {
+                  runInClient: {
+                    description:
+                      'Whether to run on the desktop client (for local file/shell access). MUST be true when task requires local-system tools. Default is false (server execution).',
+                    type: 'boolean',
+                  },
+                }),
+                timeout: {
+                  description: 'Optional timeout in milliseconds. Default is 30 minutes.',
+                  type: 'number',
+                },
+              },
+              required: ['description', 'instruction'],
+              type: 'object',
+            },
+            type: 'array',
+          },
+        },
+        required: ['tasks'],
         type: 'object',
       },
     },

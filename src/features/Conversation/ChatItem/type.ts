@@ -10,6 +10,7 @@ export interface ChatItemProps extends Omit<FlexboxProps, 'children' | 'onChange
   avatarProps?: AvatarProps;
   belowMessage?: ReactNode;
   children?: ReactNode;
+  customAvatarRender?: (avatar: MetaData, node: ReactNode) => ReactNode;
   customErrorRender?: (error: AlertProps) => ReactNode;
   /**
    * @description Whether the chat item is disabled
@@ -34,7 +35,10 @@ export interface ChatItemProps extends Omit<FlexboxProps, 'children' | 'onChange
    */
   message?: ReactNode;
   messageExtra?: ReactNode;
-  newScreen?: boolean;
+  /**
+   * Dynamic min-height for new screen effect, e.g. "calc(100dvh - 350px)"
+   */
+  newScreenMinHeight?: string;
   onAvatarClick?: () => void;
   onDoubleClick?: DivProps['onDoubleClick'];
   /**

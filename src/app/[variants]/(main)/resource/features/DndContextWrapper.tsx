@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import FileIcon from '@/components/FileIcon';
-import { clearTreeFolderCache } from '@/features/ResourceManager/components/Tree';
+import { clearTreeFolderCache } from '@/features/ResourceManager/components/LibraryHierarchy';
 import { useFileStore } from '@/store/file';
 
 import { useResourceManagerStore } from './store';
@@ -60,7 +60,8 @@ interface DragState {
 
 const DragStateContext = createContext<{
   currentDrag: DragState | null;
-  setCurrentDrag: (state: DragState | null) => void;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setCurrentDrag: (_state: DragState | null) => void;
 }>({
   currentDrag: null,
   setCurrentDrag: () => {},
@@ -77,10 +78,8 @@ export const DndContextWrapper = memo<PropsWithChildren>(({ children }) => {
   const { message } = App.useApp();
   const [currentDrag, setCurrentDrag] = useState<DragState | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const updateDocument = useFileStore((s) => s.updateDocument);
-  const moveFileToFolder = useFileStore((s) => s.moveFileToFolder);
-  const refreshFileList = useFileStore((s) => s.refreshFileList);
-  const fileList = useFileStore((s) => s.fileList);
+  const moveResource = useFileStore((s) => s.moveResource);
+  const resourceList = useFileStore((s) => s.resourceList);
   const selectedFileIds = useResourceManagerStore((s) => s.selectedFileIds);
   const setSelectedFileIds = useResourceManagerStore((s) => s.setSelectedFileIds);
   const libraryId = useResourceManagerStore((s) => s.libraryId);
@@ -142,43 +141,28 @@ export const DndContextWrapper = memo<PropsWithChildren>(({ children }) => {
         return;
       }
 
+      setCurrentDrag(null);
+
+      // Show loading toast
+      const hideLoading = message.loading(t('FileManager.actions.moving'), 0);
+
       try {
-        // Track source folder IDs before moving
-        const sourceFolderIds = new Set<string | null>();
-
-        const pools = itemsToMove.map((id) => {
-          const item = fileList.find((f) => f.id === id);
-          const itemData = item || (id === currentDrag.id ? currentDrag.data : null);
-
-          if (!itemData) return Promise.resolve();
-
-          // Track source folder ID
-          if (item?.parentId !== undefined) {
-            sourceFolderIds.add(item.parentId);
-          }
-
-          const isDocument =
-            itemData.sourceType === 'document' ||
-            itemData.fileType === 'custom/document' ||
-            itemData.fileType === 'custom/folder';
-
-          if (isDocument) {
-            return updateDocument(id, { parentId: targetParentId });
-          } else {
-            return moveFileToFolder(id, targetParentId);
-          }
-        });
+        // Move all items using optimistic moveResource
+        const pools = itemsToMove.map((id) => moveResource(id, targetParentId));
 
         await Promise.all(pools);
 
-        // Refresh file list to invalidate SWR cache for both Explorer and Tree
-        await refreshFileList();
+        // Refetch resources to update the view (items should disappear from current folder)
+        const { revalidateResources } = await import('@/store/file/slices/resource/hooks');
+        await revalidateResources();
 
         // Clear and reload all expanded folders in Tree's module-level cache
         if (libraryId) {
           await clearTreeFolderCache(libraryId);
         }
 
+        // Hide loading and show success
+        hideLoading();
         message.success(t('FileManager.actions.moveSuccess'));
 
         if (isDraggingSelection) {
@@ -186,9 +170,9 @@ export const DndContextWrapper = memo<PropsWithChildren>(({ children }) => {
         }
       } catch (error) {
         console.error('Failed to move file:', error);
+        // Hide loading and show error
+        hideLoading();
         message.error(t('FileManager.actions.moveError'));
-      } finally {
-        setCurrentDrag(null);
       }
     };
 
@@ -196,24 +180,32 @@ export const DndContextWrapper = memo<PropsWithChildren>(({ children }) => {
       event.preventDefault();
     };
 
+    const handleDragEnd = () => {
+      // Always clear drag state when drag ends, regardless of drop success
+      // This ensures the overlay disappears immediately
+      setCurrentDrag(null);
+    };
+
     document.addEventListener('dragstart', handleDragStart);
     document.addEventListener('drag', handleDrag);
-    document.addEventListener('drop', handleDrop);
+    // Use capture phase so drops still work even if some UI stops propagation
+    // (e.g., header dropdowns / menus).
+    document.addEventListener('drop', handleDrop, true);
     document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('dragend', handleDragEnd);
 
     return () => {
       document.removeEventListener('dragstart', handleDragStart);
       document.removeEventListener('drag', handleDrag);
-      document.removeEventListener('drop', handleDrop);
+      document.removeEventListener('drop', handleDrop, true);
       document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('dragend', handleDragEnd);
     };
   }, [
     currentDrag,
     selectedFileIds,
-    fileList,
-    updateDocument,
-    moveFileToFolder,
-    refreshFileList,
+    resourceList,
+    moveResource,
     setSelectedFileIds,
     message,
     t,

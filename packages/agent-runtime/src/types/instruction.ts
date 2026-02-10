@@ -35,6 +35,8 @@ export interface AgentRuntimeContext {
     | 'llm_result'
     | 'tool_result'
     | 'tools_batch_result'
+    | 'task_result'
+    | 'tasks_batch_result'
     | 'human_response'
     | 'human_approved_tool'
     | 'human_abort'
@@ -207,6 +209,7 @@ export interface AgentInstructionResolveAbortedTools {
 
 /**
  * Instruction to execute context compression
+ * When triggered, compresses ALL messages into a single MessageGroup summary
  */
 export interface AgentInstructionCompressContext {
   payload: {
@@ -214,14 +217,134 @@ export interface AgentInstructionCompressContext {
     currentTokenCount: number;
     /** Existing summary to incorporate (for incremental compression) */
     existingSummary?: string;
-    /** Number of recent messages to keep uncompressed */
-    keepRecentCount: number;
     /** Messages to compress */
     messages: any[];
-    /** Topic ID for the conversation */
-    topicId: string;
   };
   type: 'compress_context';
+}
+
+/**
+ * Task definition for exec_tasks instruction
+ */
+export interface ExecTaskItem {
+  /** Brief description of what this task does (shown in UI) */
+  description: string;
+  /** Whether to inherit context messages from parent conversation */
+  inheritMessages?: boolean;
+  /** Detailed instruction/prompt for the task execution */
+  instruction: string;
+  /**
+   * Whether to execute the task on the client side (desktop only).
+   * When true and running on desktop, the task will be executed locally
+   * with access to local tools (file system, shell commands, etc.).
+   *
+   * IMPORTANT: This MUST be set to true when the task requires:
+   * - Reading/writing local files via `local-system` tool
+   * - Executing shell commands
+   * - Any other desktop-only local tool operations
+   *
+   * If not specified or false, the task runs on the server (default behavior).
+   * On non-desktop platforms (web), this flag is ignored and tasks always run on server.
+   */
+  runInClient?: boolean;
+  /** Timeout in milliseconds (optional, default 30 minutes) */
+  timeout?: number;
+}
+
+/**
+ * Instruction to execute a single async task (server-side)
+ */
+export interface AgentInstructionExecTask {
+  payload: {
+    /** Parent message ID (tool message that triggered the task) */
+    parentMessageId: string;
+    /** Task to execute */
+    task: ExecTaskItem;
+  };
+  type: 'exec_task';
+}
+
+/**
+ * Instruction to execute multiple async tasks in parallel (server-side)
+ */
+export interface AgentInstructionExecTasks {
+  payload: {
+    /** Parent message ID (tool message that triggered the tasks) */
+    parentMessageId: string;
+    /** Array of tasks to execute */
+    tasks: ExecTaskItem[];
+  };
+  type: 'exec_tasks';
+}
+
+/**
+ * Instruction to execute a single async task on the client (desktop only)
+ * Used when task requires local tools like file system or shell commands
+ */
+export interface AgentInstructionExecClientTask {
+  payload: {
+    /** Parent message ID (tool message that triggered the task) */
+    parentMessageId: string;
+    /** Task to execute */
+    task: ExecTaskItem;
+  };
+  type: 'exec_client_task';
+}
+
+/**
+ * Instruction to execute multiple async tasks on the client in parallel (desktop only)
+ * Used when tasks require local tools like file system or shell commands
+ */
+export interface AgentInstructionExecClientTasks {
+  payload: {
+    /** Parent message ID (tool message that triggered the tasks) */
+    parentMessageId: string;
+    /** Array of tasks to execute */
+    tasks: ExecTaskItem[];
+  };
+  type: 'exec_client_tasks';
+}
+
+/**
+ * Payload for task_result phase (single task)
+ */
+export interface TaskResultPayload {
+  /** Parent message ID */
+  parentMessageId: string;
+  /** Result from executed task */
+  result: {
+    /** Error message if task failed */
+    error?: string;
+    /** Task result content */
+    result?: string;
+    /** Whether the task completed successfully */
+    success: boolean;
+    /** Task message ID */
+    taskMessageId: string;
+    /** Thread ID where the task was executed */
+    threadId: string;
+  };
+}
+
+/**
+ * Payload for tasks_batch_result phase (multiple tasks)
+ */
+export interface TasksBatchResultPayload {
+  /** Parent message ID */
+  parentMessageId: string;
+  /** Results from executed tasks */
+  results: Array<{
+    /** Error message if task failed */
+    error?: string;
+    /** Task result content */
+    result?: string;
+    /** Whether the task completed successfully */
+    success: boolean;
+    /** Task message ID */
+    taskMessageId: string;
+    /** Thread ID where the task was executed */
+    threadId: string;
+  }>;
 }
 
 /**
@@ -232,6 +355,10 @@ export type AgentInstruction =
   | AgentInstructionCallLlm
   | AgentInstructionCallTool
   | AgentInstructionCallToolsBatch
+  | AgentInstructionExecTask
+  | AgentInstructionExecTasks
+  | AgentInstructionExecClientTask
+  | AgentInstructionExecClientTasks
   | AgentInstructionRequestHumanPrompt
   | AgentInstructionRequestHumanSelect
   | AgentInstructionRequestHumanApprove

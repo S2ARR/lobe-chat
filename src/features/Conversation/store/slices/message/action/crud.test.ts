@@ -53,7 +53,6 @@ describe('Message CRUD Actions', () => {
               role: 'user',
               createdAt: Date.now(),
               updatedAt: Date.now(),
-              meta: {},
             },
           ],
         });
@@ -138,7 +137,6 @@ describe('Message CRUD Actions', () => {
         role: 'user' as const,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       act(() => {
@@ -173,7 +171,6 @@ describe('Message CRUD Actions', () => {
         role: 'assistantGroup',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
         children: [
           {
             id: 'child-1',
@@ -223,7 +220,6 @@ describe('Message CRUD Actions', () => {
         role: 'user' as const,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
       };
 
       act(() => {
@@ -246,7 +242,6 @@ describe('Message CRUD Actions', () => {
         role: 'assistantGroup',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        meta: {},
         children: [{ id: 'child-1', content: 'Response' }],
       };
 
@@ -270,6 +265,97 @@ describe('Message CRUD Actions', () => {
       });
 
       expect(removeMessagesSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteDBMessage', () => {
+    it('should delete a single DB message directly', async () => {
+      const removeMessageSpy = vi
+        .spyOn(messageServiceModule.messageService, 'removeMessage')
+        .mockResolvedValue({
+          success: true,
+          messages: [],
+        });
+
+      const store = createTestStore();
+
+      const testMessage = {
+        id: 'msg-1',
+        content: 'Hello',
+        role: 'user' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      act(() => {
+        store.getState().replaceMessages([testMessage]);
+      });
+
+      expect(store.getState().dbMessages.length).toBe(1);
+
+      await act(async () => {
+        await store.getState().deleteDBMessage('msg-1');
+      });
+
+      expect(removeMessageSpy).toHaveBeenCalledWith('msg-1', {
+        agentId: 'test-session',
+        threadId: null,
+        topicId: null,
+      });
+    });
+
+    it('should do nothing if message not found in dbMessages', async () => {
+      const removeMessageSpy = vi.spyOn(messageServiceModule.messageService, 'removeMessage');
+
+      const store = createTestStore();
+
+      await act(async () => {
+        await store.getState().deleteDBMessage('nonexistent');
+      });
+
+      expect(removeMessageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not handle assistantGroup aggregation like deleteMessage does', async () => {
+      const removeMessageSpy = vi
+        .spyOn(messageServiceModule.messageService, 'removeMessage')
+        .mockResolvedValue({
+          success: true,
+          messages: [],
+        });
+
+      const store = createTestStore();
+
+      // Create raw DB messages (not aggregated)
+      const messages = [
+        {
+          id: 'assistant-1',
+          content: 'Response 1',
+          role: 'assistant' as const,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: 'assistant-2',
+          content: 'Response 2',
+          role: 'assistant' as const,
+          createdAt: Date.now() + 1,
+          updatedAt: Date.now() + 1,
+        },
+      ];
+
+      act(() => {
+        store.getState().replaceMessages(messages);
+      });
+
+      // Delete only assistant-1, should NOT delete assistant-2
+      await act(async () => {
+        await store.getState().deleteDBMessage('assistant-1');
+      });
+
+      // Should call removeMessage with only the single ID
+      expect(removeMessageSpy).toHaveBeenCalledWith('assistant-1', expect.any(Object));
+      expect(removeMessageSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -398,7 +484,6 @@ describe('Message CRUD Actions', () => {
               role: 'user',
               createdAt: Date.now(),
               updatedAt: Date.now(),
-              meta: {},
             },
           ],
         });
@@ -544,7 +629,6 @@ describe('Message CRUD Actions', () => {
             role: 'user',
             createdAt: Date.now(),
             updatedAt: Date.now(),
-            meta: {},
           },
         ]);
       });

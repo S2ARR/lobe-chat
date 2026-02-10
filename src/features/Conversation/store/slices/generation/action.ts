@@ -37,12 +37,12 @@ export interface GenerationAction {
   /**
    * Continue generation from a message
    */
-  continueGeneration: (messageId: string) => Promise<void>;
+  continueGeneration: (displayMessageId: string) => Promise<void>;
 
   /**
    * Continue generation from a specific block
    */
-  continueGenerationMessage: (blockId: string, messageId: string) => Promise<void>;
+  continueGenerationMessage: (displayMessageId: string, messageId: string) => Promise<void>;
 
   /**
    * Delete and regenerate a message
@@ -135,30 +135,48 @@ export const generationSlice: StateCreator<
     await chatStore.clearTranslate(messageId);
   },
 
-  continueGeneration: async (messageId: string) => {
-    // Note: continueGenerationMessage takes (blockId, messageId)
-    // For now, we use messageId for both since we don't have block ID
-    // Hooks are handled in continueGenerationMessage
-    await get().continueGenerationMessage(messageId, messageId);
+  continueGeneration: async (groupMessageId: string) => {
+    const { displayMessages } = get();
+
+    // Find the message
+    const message = displayMessages.find((m) => m.id === groupMessageId);
+    if (!message) return;
+
+    // If it's an assistantGroup, find the last child's ID as blockId
+    let lastBlockId: string | undefined;
+
+    if (message.role !== 'assistantGroup') return;
+
+    if (message.children && message.children.length > 0) {
+      const lastChild = message.children.at(-1);
+
+      if (lastChild) {
+        lastBlockId = lastChild.id;
+      }
+    }
+
+    if (!lastBlockId) return;
+
+    await get().continueGenerationMessage(groupMessageId, lastBlockId);
   },
 
-  continueGenerationMessage: async (blockId: string, messageId: string) => {
+  continueGenerationMessage: async (displayMessageId: string, dbMessageId: string) => {
     const { context, displayMessages, hooks } = get();
     const chatStore = useChatStore.getState();
 
     // Find the message (blockId refers to the assistant message to continue from)
-    const message = displayMessages.find((m) => m.id === blockId);
+    const message = displayMessages.find((m) => m.id === displayMessageId);
     if (!message) return;
 
     // ===== Hook: onBeforeContinue =====
     if (hooks.onBeforeContinue) {
-      const shouldProceed = await hooks.onBeforeContinue(messageId);
+      const shouldProceed = await hooks.onBeforeContinue(displayMessageId);
       if (shouldProceed === false) return;
     }
 
     // Create continue operation with ConversationStore context (includes groupId)
     const { operationId } = chatStore.startOperation({
-      context: { ...context, messageId },
+      context: { ...context, messageId: displayMessageId },
       type: 'continue',
     });
 
@@ -167,7 +185,7 @@ export const generationSlice: StateCreator<
       await chatStore.internal_execAgentRuntime({
         context,
         messages: displayMessages,
-        parentMessageId: blockId,
+        parentMessageId: dbMessageId,
         parentMessageType: message.role as 'assistant' | 'tool' | 'user',
         parentOperationId: operationId,
       });
@@ -176,7 +194,7 @@ export const generationSlice: StateCreator<
 
       // ===== Hook: onContinueComplete =====
       if (hooks.onContinueComplete) {
-        hooks.onContinueComplete(messageId);
+        hooks.onContinueComplete(displayMessageId);
       }
     } catch (error) {
       chatStore.failOperation(operationId, {
@@ -188,8 +206,16 @@ export const generationSlice: StateCreator<
   },
 
   delAndRegenerateMessage: async (messageId: string) => {
-    const { context } = get();
+    const { context, displayMessages } = get();
     const chatStore = useChatStore.getState();
+
+    // Find the assistant message and get parent user message ID before deletion
+    // This is needed because after deletion, we can't find the parent anymore
+    const currentMessage = displayMessages.find((c) => c.id === messageId);
+    if (!currentMessage) return;
+
+    const userId = currentMessage.parentId;
+    if (!userId) return;
 
     // Create operation to track context (use 'regenerate' type since this is a regenerate action)
     const { operationId } = chatStore.startOperation({
@@ -197,9 +223,12 @@ export const generationSlice: StateCreator<
       type: 'regenerate',
     });
 
-    // Regenerate first, then delete
-    await get().regenerateAssistantMessage(messageId);
+    // IMPORTANT: Delete first, then regenerate (LOBE-2533)
+    // If we regenerate first, it switches to a new branch, causing the original
+    // message to no longer appear in displayMessages. Then deleteMessage cannot
+    // find the message and fails silently.
     await chatStore.deleteMessage(messageId, { operationId });
+    await get().regenerateUserMessage(userId);
     chatStore.completeOperation(operationId);
   },
 
@@ -276,8 +305,15 @@ export const generationSlice: StateCreator<
     });
 
     try {
+      // Calculate next branch index by counting children of this user message
+      // We need to count how many assistant messages have this user message as parent
+      const { dbMessages } = get();
+      const childrenCount = dbMessages.filter((m) => m.parentId === messageId).length;
+      // New branch index = current children count (since index is 0-based)
+      const nextBranchIndex = childrenCount;
+
       // Switch to a new branch (pass operationId for correct context in optimistic update)
-      await chatStore.switchMessageBranch(messageId, item.branch ? item.branch.count : 1, {
+      await chatStore.switchMessageBranch(messageId, nextBranchIndex, {
         operationId,
       });
 

@@ -1,10 +1,11 @@
 import type { NewChatGroup } from '@lobechat/types';
+import urlJoin from 'url-join';
 import { type StateCreator } from 'zustand/vanilla';
 
-import { INBOX_SESSION_ID } from '@/const/session';
 import { chatGroupService } from '@/services/chatGroup';
 import { type ChatGroupStore } from '@/store/agentGroup/store';
-import { getSessionStoreState } from '@/store/session';
+import { useChatStore } from '@/store/chat';
+import { getHomeStoreState } from '@/store/home';
 
 export interface ChatGroupLifecycleAction {
   createGroup: (
@@ -12,7 +13,16 @@ export interface ChatGroupLifecycleAction {
     agentIds?: string[],
     silent?: boolean,
   ) => Promise<string>;
-  deleteGroup: (id: string) => Promise<void>;
+  /**
+   * Switch to a new topic in the group
+   * Clears activeTopicId and navigates to group root
+   */
+  switchToNewTopic: () => void;
+  /**
+   * Switch to a topic in the group with proper route handling
+   * @param topicId - Topic ID to switch to, or undefined/null for new topic
+   */
+  switchTopic: (topicId?: string | null) => void;
 }
 
 export const chatGroupLifecycleSlice: StateCreator<
@@ -21,11 +31,8 @@ export const chatGroupLifecycleSlice: StateCreator<
   [],
   ChatGroupLifecycleAction
 > = (_, get) => ({
-  /**
-   * @param silent - if true, do not switch to the new group session
-   */
   createGroup: async (newGroup, agentIds, silent = false) => {
-    const { switchSession } = getSessionStoreState();
+    const { switchToGroup, refreshAgentList } = getHomeStoreState();
 
     const { group } = await chatGroupService.createGroup(newGroup);
 
@@ -41,62 +48,33 @@ export const chatGroupLifecycleSlice: StateCreator<
 
     get().internal_dispatchChatGroup({ payload: group, type: 'addGroup' });
 
-    await get().loadGroups();
-    await getSessionStoreState().refreshSessions();
+    // Fetch full group detail to get supervisorAgentId and agents for tools injection
+    await get().internal_fetchGroupDetail(group.id);
+
+    refreshAgentList();
 
     if (!silent) {
-      switchSession(group.id);
+      switchToGroup(group.id);
     }
 
     return group.id;
   },
 
-  deleteGroup: async (id) => {
-    // First, get all group members to identify virtual members
-    // Note: ChatGroupAgentItem type is incorrectly defined in schema as agents table type
-    // but getGroupAgents actually returns chatGroupsAgents junction table entries
-    const groupAgents = (await chatGroupService.getGroupAgents(id)) as unknown as Array<{
-      agentId: string;
-      chatGroupId: string;
-    }>;
+  switchToNewTopic: () => {
+    get().switchTopic(undefined);
+  },
 
-    // Delete the group first (this will cascade delete the chat_groups_agents entries)
-    await chatGroupService.deleteGroup(id);
-    get().internal_dispatchChatGroup({ payload: id, type: 'deleteGroup' });
+  switchTopic: (topicId) => {
+    const { activeGroupId, router } = get();
+    if (!activeGroupId || !router) return;
 
-    // Now delete virtual members (agents with virtual: true)
-    const sessionStore = getSessionStoreState();
-    const sessions = sessionStore.sessions || [];
+    // Update chat store's activeTopicId
+    useChatStore.getState().switchTopic(topicId ?? undefined);
 
-    // Find and delete all virtual sessions that were members of this group
-    const virtualMemberDeletions = groupAgents
-      .map((groupAgent) => {
-        // groupAgent has agentId property from the junction table
-        const session = sessions.find((s) => {
-          // Type guard: check if it's an agent session
-          if (s.type === 'agent') {
-            return s.config?.id === groupAgent.agentId;
-          }
-          return false;
-        });
-
-        // Only delete if the session exists and has virtual flag set to true
-        if (session && session.type === 'agent' && session.config?.virtual) {
-          return sessionStore.removeSession(session.id);
-        }
-        return null;
-      })
-      .filter(Boolean);
-
-    // Wait for all virtual member deletions to complete
-    await Promise.all(virtualMemberDeletions);
-
-    await get().loadGroups();
-    await getSessionStoreState().refreshSessions();
-
-    // If the active session is the deleted group, switch to the inbox session
-    if (sessionStore.activeId === id) {
-      sessionStore.switchSession(INBOX_SESSION_ID);
-    }
+    // Navigate with replace to avoid stale query params
+    router.push(urlJoin('/group', activeGroupId), {
+      query: { topic: topicId ?? null },
+      replace: true,
+    });
   },
 });

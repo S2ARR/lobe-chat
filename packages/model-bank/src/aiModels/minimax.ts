@@ -7,9 +7,55 @@ const minimaxChatModels: AIChatModelCard[] = [
       reasoning: true,
     },
     contextWindowTokens: 204_800,
-    description: 'Built for efficient coding and agent workflows.',
-    displayName: 'MiniMax M2',
+    description:
+      'Powerful multilingual programming capabilities, comprehensively upgraded programming experience',
+    displayName: 'MiniMax M2.1',
     enabled: true,
+    id: 'MiniMax-M2.1',
+    maxOutput: 131_072,
+    pricing: {
+      currency: 'CNY',
+      units: [
+        { name: 'textInput_cacheRead', rate: 0.21, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput_cacheWrite', rate: 2.625, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput', rate: 2.1, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 8.4, strategy: 'fixed', unit: 'millionTokens' },
+      ],
+    },
+    releasedAt: '2025-12-23',
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+    },
+    contextWindowTokens: 204_800,
+    description:
+      'Powerful multilingual programming capabilities, comprehensively upgraded programming experience. Faster and more efficient.',
+    displayName: 'MiniMax M2.1 Lightning',
+    id: 'MiniMax-M2.1-Lightning',
+    maxOutput: 131_072,
+    pricing: {
+      currency: 'CNY',
+      units: [
+        { name: 'textInput_cacheRead', rate: 0.21, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput_cacheWrite', rate: 2.625, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textInput', rate: 2.1, strategy: 'fixed', unit: 'millionTokens' },
+        { name: 'textOutput', rate: 16.8, strategy: 'fixed', unit: 'millionTokens' },
+      ],
+    },
+    releasedAt: '2025-12-23',
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+    },
+    contextWindowTokens: 204_800,
+    description: 'Built specifically for efficient coding and Agent workflows',
+    displayName: 'MiniMax M2',
     id: 'MiniMax-M2',
     maxOutput: 131_072,
     pricing: {
@@ -30,7 +76,8 @@ const minimaxChatModels: AIChatModelCard[] = [
       reasoning: true,
     },
     contextWindowTokens: 204_800,
-    description: 'Built for efficient coding and agent workflows, with higher concurrency for commercial use.',
+    description:
+      'Built for efficient coding and agent workflows, with higher concurrency for commercial use.',
     displayName: 'MiniMax M2 Stable',
     id: 'MiniMax-M2-Stable',
     maxOutput: 131_072,
@@ -92,7 +139,8 @@ const minimaxChatModels: AIChatModelCard[] = [
 
 const minimaxImageModels: AIImageModelCard[] = [
   {
-    description: 'A new image generation model with fine detail, supporting text-to-image and image-to-image.',
+    description:
+      'A new image generation model with fine detail, supporting text-to-image and image-to-image.',
     displayName: 'Image 01',
     enabled: true,
     id: 'image-01',

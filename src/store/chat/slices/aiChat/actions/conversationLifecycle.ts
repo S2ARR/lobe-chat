@@ -1,5 +1,6 @@
 /* eslint-disable sort-keys-fix/sort-keys-fix, typescript-sort-keys/interface */
 // Disable the auto sort key eslint rule to make the code more logic and readable
+import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
 import { LOADING_FLAT } from '@lobechat/const';
 import {
   type ChatImageItem,
@@ -13,9 +14,11 @@ import { TRPCClientError } from '@trpc/client';
 import { t } from 'i18next';
 import { type StateCreator } from 'zustand/vanilla';
 
+import { markUserValidAction } from '@/business/client/markUserValidAction';
 import { aiChatService } from '@/services/aiChat';
 import { getAgentStoreState } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
+import { agentGroupByIdSelectors, getChatGroupStoreState } from '@/store/agentGroup';
 import { type ChatStore } from '@/store/chat/store';
 import { getFileStoreState } from '@/store/file/store';
 import { useGlobalStore } from '@/store/global';
@@ -74,11 +77,11 @@ export const conversationLifecycle: StateCreator<
   sendMessage: async ({
     message,
     files,
-    contexts,
     onlyAddUserMessage,
     context,
     messages: inputMessages,
     parentId: inputParentId,
+    pageSelections,
   }) => {
     const { internal_execAgentRuntime, mainInputEditor } = get();
 
@@ -96,7 +99,17 @@ export const conversationLifecycle: StateCreator<
     if (!agentId) return;
 
     // When creating new thread, override threadId to undefined (server will create it)
-    const operationContext = isCreatingNewThread ? { ...context, threadId: undefined } : context;
+    // Check if current agentId is the supervisor agent of the group
+    let isGroupSupervisor = false;
+    if (context.groupId) {
+      const group = agentGroupByIdSelectors.groupById(context.groupId)(getChatGroupStoreState());
+      isGroupSupervisor = group?.supervisorAgentId === agentId;
+    }
+    const operationContext = {
+      ...context,
+      ...(isCreatingNewThread && { threadId: undefined }),
+      ...(isGroupSupervisor && { isSupervisor: true }),
+    };
 
     const fileIdList = files?.map((f) => f.id);
 
@@ -173,6 +186,8 @@ export const conversationLifecycle: StateCreator<
         threadId: operationContext.threadId ?? undefined,
         imageList: tempImages.length > 0 ? tempImages : undefined,
         videoList: tempVideos.length > 0 ? tempVideos : undefined,
+        // Pass pageSelections metadata for immediate display
+        metadata: pageSelections?.length ? { pageSelections } : undefined,
       },
       { operationId, tempMessageId: tempId },
     );
@@ -184,13 +199,16 @@ export const conversationLifecycle: StateCreator<
         // if there is topicId，then add topicId to message
         topicId: operationContext.topicId ?? undefined,
         threadId: operationContext.threadId ?? undefined,
+        // Pass isSupervisor metadata for group orchestration (consistent with server)
+        metadata: operationContext.isSupervisor ? { isSupervisor: true } : undefined,
       },
       { operationId, tempMessageId: tempAssistantId },
     );
     get().internal_toggleMessageLoading(true, tempId);
 
-    // Associate temp message with operation
+    // Associate temp messages with operation
     get().associateMessageWithOperation(tempId, operationId);
+    get().associateMessageWithOperation(tempAssistantId, operationId);
 
     // Store editor state in operation metadata for cancel restoration
     const jsonState = mainInputEditor?.getJSONState();
@@ -206,7 +224,7 @@ export const conversationLifecycle: StateCreator<
       const topicId = operationContext.topicId;
       data = await aiChatService.sendMessageInServer(
         {
-          newUserMessage: { content: message, files: fileIdList, parentId },
+          newUserMessage: { content: message, files: fileIdList, pageSelections, parentId },
           // if there is topicId，then add topicId to message
           topicId: topicId ?? undefined,
           threadId: operationContext.threadId ?? undefined,
@@ -226,7 +244,12 @@ export const conversationLifecycle: StateCreator<
           agentId: operationContext.agentId,
           // Pass groupId for group chat scenarios
           groupId: operationContext.groupId ?? undefined,
-          newAssistantMessage: { model, provider: provider! },
+          newAssistantMessage: {
+            // Pass isSupervisor metadata for group orchestration
+            metadata: operationContext.isSupervisor ? { isSupervisor: true } : undefined,
+            model,
+            provider: provider!,
+          },
         },
         abortController,
       );
@@ -238,6 +261,7 @@ export const conversationLifecycle: StateCreator<
       if (data?.topics) {
         const pageSize = systemStatusSelectors.topicPageSize(useGlobalStore.getState());
         get().internal_updateTopics(operationContext.agentId, {
+          groupId: operationContext.groupId,
           items: data.topics.items,
           pageSize,
           total: data.topics.total,
@@ -268,7 +292,8 @@ export const conversationLifecycle: StateCreator<
       });
 
       if (data.isCreateNewTopic && data.topicId) {
-        await get().switchTopic(data.topicId, true);
+        // clearNewKey: true ensures the _new key data is cleared after topic creation
+        await get().switchTopic(data.topicId, { clearNewKey: true, skipRefreshMessage: true });
       }
     } catch (e) {
       console.error(e);
@@ -283,7 +308,7 @@ export const conversationLifecycle: StateCreator<
         // Check if error is due to cancellation
         if (!isAbort) {
           get().updateOperationMetadata(operationId, { inputSendErrorMsg: e.message });
-          get().mainInputEditor?.setJSONState(jsonState);
+          get().mainInputEditor?.setDocument('markdown', message);
         }
       }
     } finally {
@@ -301,6 +326,10 @@ export const conversationLifecycle: StateCreator<
     // Clear editor temp state after message created
     if (data) {
       get().updateOperationMetadata(operationId, { inputEditorTempState: null });
+    }
+
+    if (ENABLE_BUSINESS_FEATURES) {
+      markUserValidAction();
     }
 
     if (!data) return;
@@ -345,27 +374,10 @@ export const conversationLifecycle: StateCreator<
       messageMapKey(execContext),
     )(get());
 
-    const contextMessages =
-      contexts?.map((item, index) => {
-        const now = Date.now();
-        const title = item.title ? `${item.title}\n` : '';
-        return {
-          content: `Context ${index + 1}:\n${title}${item.content}`,
-          createdAt: now,
-          id: `ctx_${tempId}_${index}`,
-          meta: {},
-          role: 'system' as const,
-          updatedAt: now,
-        };
-      }) ?? [];
-
-    const runtimeMessages =
-      contextMessages.length > 0 ? [...displayMessages, ...contextMessages] : displayMessages;
-
     try {
       await internal_execAgentRuntime({
         context: execContext,
-        messages: runtimeMessages,
+        messages: displayMessages,
         parentMessageId: data.assistantMessageId,
         parentMessageType: 'assistant',
         parentOperationId: operationId, // Pass as parent operation
@@ -374,9 +386,6 @@ export const conversationLifecycle: StateCreator<
         skipCreateFirstMessage: true,
       });
 
-      //
-      // // if there is relative files, then add files to agent
-      // // only available in server mode
       const userFiles = dbMessageSelectors
         .dbUserFiles(get())
         .map((f) => f?.id)

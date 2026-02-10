@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INBOX_SESSION_ID } from '@/const/session';
 import { agentService } from '@/services/agent';
 import { chatGroupService } from '@/services/chatGroup';
+import { homeService } from '@/services/home';
 import { sessionService } from '@/services/session';
+import { getAgentStoreState } from '@/store/agent';
 import { useHomeStore } from '@/store/home';
 import { getSessionStoreState } from '@/store/session';
 
@@ -22,6 +24,12 @@ vi.mock('@/store/session', () => ({
   getSessionStoreState: vi.fn(() => ({
     activeId: 'test-session',
     switchSession: vi.fn(),
+  })),
+}));
+
+vi.mock('@/store/agent', () => ({
+  getAgentStoreState: vi.fn(() => ({
+    setActiveAgentId: vi.fn(),
   })),
 }));
 
@@ -129,22 +137,22 @@ describe('createSidebarUISlice', () => {
         await result.current.removeAgent(mockAgentId);
       });
 
-      expect(mockSwitchSession).toHaveBeenCalledWith(INBOX_SESSION_ID);
+      // removeAgent only removes and refreshes the agent list; session switching is handled in SessionStore.removeSession
+      expect(mockSwitchSession).not.toHaveBeenCalledWith(INBOX_SESSION_ID);
     });
   });
 
   describe('duplicateAgent', () => {
-    it('should duplicate an agent and switch to the new session', async () => {
+    it('should duplicate an agent and switch to the new agent', async () => {
       const mockAgentId = 'agent-123';
-      const mockNewId = 'new-agent-456';
-      const mockSwitchSession = vi.fn();
+      const mockNewAgentId = 'new-agent-456';
+      const mockSetActiveAgentId = vi.fn();
 
-      vi.mocked(getSessionStoreState).mockReturnValue({
-        activeId: 'other-agent',
-        switchSession: mockSwitchSession,
+      vi.mocked(getAgentStoreState).mockReturnValue({
+        setActiveAgentId: mockSetActiveAgentId,
       } as any);
 
-      vi.spyOn(sessionService, 'cloneSession').mockResolvedValueOnce(mockNewId);
+      vi.spyOn(agentService, 'duplicateAgent').mockResolvedValueOnce({ agentId: mockNewAgentId });
       const spyOnRefresh = vi.spyOn(useHomeStore.getState(), 'refreshAgentList');
 
       const { result } = renderHook(() => useHomeStore());
@@ -153,16 +161,16 @@ describe('createSidebarUISlice', () => {
         await result.current.duplicateAgent(mockAgentId, 'Copied Agent');
       });
 
-      expect(sessionService.cloneSession).toHaveBeenCalledWith(mockAgentId, 'Copied Agent');
+      expect(agentService.duplicateAgent).toHaveBeenCalledWith(mockAgentId, 'Copied Agent');
       expect(spyOnRefresh).toHaveBeenCalled();
-      expect(mockSwitchSession).toHaveBeenCalledWith(mockNewId);
+      expect(mockSetActiveAgentId).toHaveBeenCalledWith(mockNewAgentId);
     });
 
     it('should show error message when duplication fails', async () => {
       const mockAgentId = 'agent-123';
       const { message } = await import('@/components/AntdStaticMethods');
 
-      vi.spyOn(sessionService, 'cloneSession').mockResolvedValueOnce(undefined);
+      vi.spyOn(agentService, 'duplicateAgent').mockResolvedValueOnce(null);
       vi.spyOn(useHomeStore.getState(), 'refreshAgentList');
 
       const { result } = renderHook(() => useHomeStore());
@@ -174,26 +182,24 @@ describe('createSidebarUISlice', () => {
       expect(message.error).toHaveBeenCalled();
     });
 
-    it('should use default title when not provided', async () => {
+    it('should use provided title when duplicating', async () => {
       const mockAgentId = 'agent-123';
-      const mockNewId = 'new-agent-456';
+      const mockNewAgentId = 'new-agent-456';
 
-      vi.mocked(getSessionStoreState).mockReturnValue({
-        activeId: 'other-agent',
-        switchSession: vi.fn(),
+      vi.mocked(getAgentStoreState).mockReturnValue({
+        setActiveAgentId: vi.fn(),
       } as any);
 
-      vi.spyOn(sessionService, 'cloneSession').mockResolvedValueOnce(mockNewId);
+      vi.spyOn(agentService, 'duplicateAgent').mockResolvedValueOnce({ agentId: mockNewAgentId });
       vi.spyOn(useHomeStore.getState(), 'refreshAgentList');
 
       const { result } = renderHook(() => useHomeStore());
 
       await act(async () => {
-        await result.current.duplicateAgent(mockAgentId);
+        await result.current.duplicateAgent(mockAgentId, 'Custom Title');
       });
 
-      // In test environment, t() returns undefined, so fallback to 'Copy'
-      expect(sessionService.cloneSession).toHaveBeenCalledWith(mockAgentId, 'Copy');
+      expect(agentService.duplicateAgent).toHaveBeenCalledWith(mockAgentId, 'Custom Title');
     });
   });
 
@@ -201,7 +207,7 @@ describe('createSidebarUISlice', () => {
     it('should update agent group and refresh agent list', async () => {
       const mockAgentId = 'agent-123';
       const mockGroupId = 'group-456';
-      vi.spyOn(sessionService, 'updateSession').mockResolvedValueOnce(undefined as any);
+      vi.spyOn(homeService, 'updateAgentSessionGroupId').mockResolvedValueOnce(undefined as any);
       const spyOnRefresh = vi.spyOn(useHomeStore.getState(), 'refreshAgentList');
 
       const { result } = renderHook(() => useHomeStore());
@@ -210,15 +216,13 @@ describe('createSidebarUISlice', () => {
         await result.current.updateAgentGroup(mockAgentId, mockGroupId);
       });
 
-      expect(sessionService.updateSession).toHaveBeenCalledWith(mockAgentId, {
-        group: mockGroupId,
-      });
+      expect(homeService.updateAgentSessionGroupId).toHaveBeenCalledWith(mockAgentId, mockGroupId);
       expect(spyOnRefresh).toHaveBeenCalled();
     });
 
     it('should set group to default when groupId is null', async () => {
       const mockAgentId = 'agent-123';
-      vi.spyOn(sessionService, 'updateSession').mockResolvedValueOnce(undefined as any);
+      vi.spyOn(homeService, 'updateAgentSessionGroupId').mockResolvedValueOnce(undefined as any);
       vi.spyOn(useHomeStore.getState(), 'refreshAgentList');
 
       const { result } = renderHook(() => useHomeStore());
@@ -227,7 +231,7 @@ describe('createSidebarUISlice', () => {
         await result.current.updateAgentGroup(mockAgentId, null);
       });
 
-      expect(sessionService.updateSession).toHaveBeenCalledWith(mockAgentId, { group: 'default' });
+      expect(homeService.updateAgentSessionGroupId).toHaveBeenCalledWith(mockAgentId, null);
     });
   });
 

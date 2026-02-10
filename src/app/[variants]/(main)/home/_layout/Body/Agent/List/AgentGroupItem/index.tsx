@@ -1,20 +1,20 @@
 import { GROUP_CHAT_URL } from '@lobechat/const';
 import type { SidebarAgentItem } from '@lobechat/types';
-import { ActionIcon, Dropdown, Icon, type MenuProps } from '@lobehub/ui';
+import { ActionIcon, Icon } from '@lobehub/ui';
 import { cssVar } from 'antd-style';
 import { Loader2, PinIcon } from 'lucide-react';
 import { type CSSProperties, type DragEvent, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import GroupAvatar from '@/features/GroupAvatar';
+import AgentGroupAvatar from '@/features/AgentGroupAvatar';
 import NavItem from '@/features/NavPanel/components/NavItem';
 import { useGlobalStore } from '@/store/global';
 import { useHomeStore } from '@/store/home';
 
 import Actions from '../Item/Actions';
-import { useDropdownMenu } from '../Item/useDropdownMenu';
 import Editing from './Editing';
+import { useGroupDropdownMenu } from './useDropdownMenu';
 
 interface GroupItemProps {
   className?: string;
@@ -23,15 +23,15 @@ interface GroupItemProps {
 }
 
 const GroupItem = memo<GroupItemProps>(({ item, style, className }) => {
-  const { id, avatar, title, pinned } = item;
+  const { id, avatar, backgroundColor, title, pinned } = item;
   const { t } = useTranslation('chat');
 
   const openAgentInNewWindow = useGlobalStore((s) => s.openAgentInNewWindow);
 
   // Get UI state from homeStore (editing, updating)
   const [editing, isUpdating] = useHomeStore((s) => [
-    s.agentRenamingId === id,
-    s.agentUpdatingId === id,
+    s.groupRenamingId === id,
+    s.groupUpdatingId === id,
   ]);
 
   // Get display title with fallback
@@ -63,7 +63,7 @@ const GroupItem = memo<GroupItemProps>(({ item, style, className }) => {
 
   const toggleEditing = useCallback(
     (visible?: boolean) => {
-      useHomeStore.getState().setAgentRenamingId(visible ? id : null);
+      useHomeStore.getState().setGroupRenamingId(visible ? id : null);
     },
     [id],
   );
@@ -82,44 +82,47 @@ const GroupItem = memo<GroupItemProps>(({ item, style, className }) => {
     if (isUpdating) {
       return <Icon color={cssVar.colorTextDescription} icon={Loader2} size={18} spin />;
     }
-    return <GroupAvatar avatars={(avatar as any) || []} size={22} />;
-  }, [isUpdating, avatar]);
 
-  const dropdownMenu: MenuProps['items'] = useDropdownMenu({
-    group: undefined,
+    // If avatar is a string, it's a custom group avatar
+    const customAvatar = typeof avatar === 'string' ? avatar : undefined;
+    // If avatar is an array, it's member avatars for composition
+    const memberAvatars = Array.isArray(avatar) ? avatar : [];
+
+    return (
+      <AgentGroupAvatar
+        avatar={customAvatar}
+        backgroundColor={backgroundColor || undefined}
+        memberAvatars={memberAvatars}
+        size={22}
+      />
+    );
+  }, [isUpdating, avatar, backgroundColor]);
+
+  const dropdownMenu = useGroupDropdownMenu({
     id,
-    openCreateGroupModal: () => {}, // Groups don't need this
-    parentType: 'group',
     pinned: pinned ?? false,
-    sessionType: 'group',
     toggleEditing,
   });
 
   return (
     <>
-      <Dropdown
-        menu={{
-          items: dropdownMenu,
-        }}
-        trigger={['contextMenu']}
-      >
-        <Link aria-label={id} to={groupUrl}>
-          <NavItem
-            actions={<Actions dropdownMenu={dropdownMenu} />}
-            className={className}
-            disabled={editing || isUpdating}
-            draggable={!editing && !isUpdating}
-            extra={pinIcon}
-            icon={avatarIcon}
-            key={id}
-            onDoubleClick={handleDoubleClick}
-            onDragEnd={handleDragEnd}
-            onDragStart={handleDragStart}
-            style={style}
-            title={displayTitle}
-          />
-        </Link>
-      </Dropdown>
+      <Link aria-label={id} to={groupUrl}>
+        <NavItem
+          actions={<Actions dropdownMenu={dropdownMenu} />}
+          className={className}
+          contextMenuItems={dropdownMenu}
+          disabled={editing || isUpdating}
+          draggable={!editing && !isUpdating}
+          extra={pinIcon}
+          icon={avatarIcon}
+          key={id}
+          onDoubleClick={handleDoubleClick}
+          onDragEnd={handleDragEnd}
+          onDragStart={handleDragStart}
+          style={style}
+          title={displayTitle}
+        />
+      </Link>
       <Editing id={id} title={displayTitle} toggleEditing={toggleEditing} />
     </>
   );

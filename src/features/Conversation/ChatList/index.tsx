@@ -4,6 +4,8 @@ import { type ReactNode, memo, useCallback } from 'react';
 
 import { useFetchTopicMemories } from '@/hooks/useFetchMemoryForTopic';
 import { useFetchNotebookDocuments } from '@/hooks/useFetchNotebookDocuments';
+import { useUserStore } from '@/store/user';
+import { settingsSelectors } from '@/store/user/selectors';
 
 import WideScreenContainer from '../../WideScreenContainer';
 import MessageItem from '../Messages';
@@ -13,6 +15,10 @@ import { dataSelectors, useConversationStore } from '../store';
 import VirtualizedList from './components/VirtualizedList';
 
 export interface ChatListProps {
+  /**
+   * Disable the actions bar for all messages (e.g., in share page)
+   */
+  disableActionsBar?: boolean;
   /**
    * Custom item renderer. If not provided, uses default ChatItem.
    */
@@ -27,18 +33,22 @@ export interface ChatListProps {
  *
  * Uses ConversationStore for message data and fetching.
  */
-const ChatList = memo<ChatListProps>(({ welcome, itemContent }) => {
+const ChatList = memo<ChatListProps>(({ disableActionsBar, welcome, itemContent }) => {
   // Fetch messages (SWR key is null when skipFetch is true)
   const context = useConversationStore((s) => s.context);
+  const enableUserMemories = useUserStore(settingsSelectors.memoryEnabled);
   const [skipFetch, useFetchMessages] = useConversationStore((s) => [
     dataSelectors.skipFetch(s),
     s.useFetchMessages,
   ]);
   useFetchMessages(context, skipFetch);
 
-  // Fetch notebook documents when topic is selected
-  useFetchNotebookDocuments(context.topicId!);
-  useFetchTopicMemories(context.topicId!);
+  // Skip fetching notebook and memories for share pages (they require authentication)
+  const isSharePage = !!context.topicShareId;
+
+  // Fetch notebook documents when topic is selected (skip for share pages)
+  useFetchNotebookDocuments(isSharePage ? undefined : context.topicId!);
+  useFetchTopicMemories(enableUserMemories && !isSharePage ? context.topicId : undefined);
 
   // Use selectors for data
 
@@ -53,7 +63,11 @@ const ChatList = memo<ChatListProps>(({ welcome, itemContent }) => {
   );
   const messagesInit = useConversationStore(dataSelectors.messagesInit);
 
-  if (!messagesInit) {
+  // When topicId is null (new conversation), show welcome directly without waiting for fetch
+  // because there's no server data to fetch - only local optimistic updates exist
+  const isNewConversation = !context.topicId;
+
+  if (!messagesInit && !isNewConversation) {
     return <SkeletonList />;
   }
 
@@ -74,10 +88,9 @@ const ChatList = memo<ChatListProps>(({ welcome, itemContent }) => {
   }
 
   return (
-    <MessageActionProvider withSingletonActionsBar>
+    <MessageActionProvider withSingletonActionsBar={!disableActionsBar}>
       <VirtualizedList
         dataSource={displayMessageIds}
-        // isGenerating={isGenerating}
         itemContent={itemContent ?? defaultItemContent}
       />
     </MessageActionProvider>

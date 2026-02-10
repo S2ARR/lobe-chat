@@ -1,4 +1,4 @@
-import { Button, Center, Checkbox, Flexbox, Icon, Tooltip } from '@lobehub/ui';
+import { Button, Center, Checkbox, ContextMenuTrigger, Flexbox, Icon } from '@lobehub/ui';
 import { App, Input } from 'antd';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
 import dayjs from 'dayjs';
@@ -7,7 +7,7 @@ import { isNull } from 'es-toolkit/compat';
 import { FileBoxIcon, FileText, FolderIcon } from 'lucide-react';
 import { type DragEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { shallow } from 'zustand/shallow';
 
 import {
   getTransparentDragImage,
@@ -16,46 +16,43 @@ import {
 } from '@/app/[variants]/(main)/resource/features/DndContextWrapper';
 import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/features/store';
 import FileIcon from '@/components/FileIcon';
+import { clearTreeFolderCache } from '@/features/ResourceManager/components/LibraryHierarchy';
+import { PAGE_FILE_TYPE } from '@/features/ResourceManager/constants';
 import { fileManagerSelectors, useFileStore } from '@/store/file';
 import { type FileListItem as FileListItemType } from '@/types/files';
 import { formatSize } from '@/utils/format';
 import { isChunkingUnsupported } from '@/utils/isChunkingUnsupported';
 
+import { useFileItemClick } from '../../hooks/useFileItemClick';
 import DropdownMenu from '../../ItemDropdown/DropdownMenu';
+import { useFileItemDropdown } from '../../ItemDropdown/useFileItemDropdown';
 import ChunksBadge from './ChunkTag';
+import TruncatedFileName from './TruncatedFileName';
 
+// Initialize dayjs plugin once at module level
 dayjs.extend(relativeTime);
 
 export const FILE_DATE_WIDTH = 160;
 export const FILE_SIZE_WIDTH = 140;
 
 const styles = createStaticStyles(({ css }) => {
-  const hover = css`
-    opacity: 0;
-  `;
   return {
     container: css`
       cursor: pointer;
+      min-width: 800px;
 
       &:hover {
         background: ${cssVar.colorFillTertiary};
-
-        .${cx(hover)} {
-          opacity: 1;
-        }
-      }
-
-      .chunk-tag {
-        opacity: 1;
       }
     `,
 
     dragOver: css`
-      color: ${cssVar.colorBgElevated} !important;
-      background-color: ${cssVar.colorText} !important;
+      outline: 1px dashed ${cssVar.colorPrimaryBorder};
+      outline-offset: -2px;
 
-      * {
-        color: ${cssVar.colorBgElevated} !important;
+      &,
+      &:hover {
+        background: ${cssVar.colorPrimaryBg};
       }
     `,
 
@@ -64,7 +61,33 @@ const styles = createStaticStyles(({ css }) => {
       opacity: 0.5;
     `,
 
-    hover,
+    evenRow: css`
+      background: ${cssVar.colorFillQuaternary};
+
+      /* Hover effect overrides zebra striping on the hovered row only */
+      &:hover {
+        background: ${cssVar.colorFillTertiary};
+      }
+
+      /* Hide zebra striping when any row is hovered */
+      .any-row-hovered & {
+        background: transparent;
+      }
+
+      /* But keep hover effect on the actual hovered row */
+      .any-row-hovered &:hover {
+        background: ${cssVar.colorFillTertiary};
+      }
+    `,
+
+    hover: css`
+      opacity: 0;
+
+      &[data-popup-open],
+      .file-list-item-group:hover & {
+        opacity: 1;
+      }
+    `,
     item: css`
       padding-block: 0;
       padding-inline: 0 24px;
@@ -78,14 +101,12 @@ const styles = createStaticStyles(({ css }) => {
       margin-inline-start: 12px;
 
       color: ${cssVar.colorText};
-      text-overflow: ellipsis;
       white-space: nowrap;
     `,
     nameContainer: css`
       overflow: hidden;
       flex: 1;
       min-width: 0;
-      max-width: 600px;
     `,
     selected: css`
       background: ${cssVar.colorFillTertiary};
@@ -98,7 +119,14 @@ const styles = createStaticStyles(({ css }) => {
 });
 
 interface FileListItemProps extends FileListItemType {
+  columnWidths: {
+    date: number;
+    name: number;
+    size: number;
+  };
   index: number;
+  isAnyRowHovered: boolean;
+  onHoverChange: (isHovered: boolean) => void;
   onSelectedChange: (id: string, selected: boolean, shiftKey: boolean, index: number) => void;
   pendingRenameItemId?: string | null;
   selected?: boolean;
@@ -109,6 +137,7 @@ const FileListItem = memo<FileListItemProps>(
   ({
     size,
     chunkingError,
+    columnWidths,
     embeddingError,
     embeddingStatus,
     finishEmbedding,
@@ -126,45 +155,63 @@ const FileListItem = memo<FileListItemProps>(
     sourceType,
     slug,
     pendingRenameItemId,
+    onHoverChange,
   }) => {
     const { t } = useTranslation(['components', 'file']);
     const { message } = App.useApp();
-    const navigate = useNavigate();
-    const [, setSearchParams] = useSearchParams();
+    // Consolidate all FileStore subscriptions with shallow equality
+    const fileStoreState = useFileStore(
+      (s) => ({
+        isCreatingFileParseTask: fileManagerSelectors.isCreatingFileParseTask(id)(s),
+        parseFiles: s.parseFilesToChunks,
+        refreshFileList: s.refreshFileList,
+        updateResource: s.updateResource,
+      }),
+      shallow,
+    );
 
-    const [isCreatingFileParseTask, parseFiles, renameFolder, setPendingRenameItemId] =
-      useFileStore((s) => [
-        fileManagerSelectors.isCreatingFileParseTask(id)(s),
-        s.parseFilesToChunks,
-        s.renameFolder,
-        s.setPendingRenameItemId,
-      ]);
+    // Consolidate all ResourceManagerStore subscriptions with shallow equality
+    const resourceManagerState = useResourceManagerStore(
+      (s) => ({
+        libraryId: s.libraryId,
+        setPendingRenameItemId: s.setPendingRenameItemId,
+      }),
+      shallow,
+    );
 
     const [isRenaming, setIsRenaming] = useState(false);
     const [renamingValue, setRenamingValue] = useState(name);
     const inputRef = useRef<any>(null);
-
-    const libraryId = useResourceManagerStore((s) => s.libraryId);
+    const isConfirmingRef = useRef(false);
     const isDragActive = useDragActive();
     const { setCurrentDrag } = useDragState();
     const [isDragging, setIsDragging] = useState(false);
     const [isOver, setIsOver] = useState(false);
 
-    // Memoize computed values that don't change
     const computedValues = useMemo(() => {
-      const isPDF = fileType?.toLowerCase() === 'pdf' || name?.toLowerCase().endsWith('.pdf');
+      const lowerFileType = fileType?.toLowerCase();
+      const lowerName = name?.toLowerCase();
+      const isPDF = lowerFileType === 'pdf' || lowerName?.endsWith('.pdf');
+      // Office files should use the MSDoc viewer, not the page editor
+      const isOfficeFile =
+        lowerName?.endsWith('.xls') ||
+        lowerName?.endsWith('.xlsx') ||
+        lowerName?.endsWith('.doc') ||
+        lowerName?.endsWith('.docx') ||
+        lowerName?.endsWith('.ppt') ||
+        lowerName?.endsWith('.pptx') ||
+        lowerName?.endsWith('.odt');
       return {
-        emoji: sourceType === 'document' || fileType === 'custom/document' ? metadata?.emoji : null,
+        emoji: sourceType === 'document' || fileType === PAGE_FILE_TYPE ? metadata?.emoji : null,
         isFolder: fileType === 'custom/folder',
-        // PDF files should not be treated as pages, even if they have sourceType='document'
-        isPage: !isPDF && (sourceType === 'document' || fileType === 'custom/document'),
+        // PDF and Office files should not be treated as pages, even if they have sourceType='document'
+        isPage: !isPDF && !isOfficeFile && (sourceType === 'document' || fileType === PAGE_FILE_TYPE),
         isSupportedForChunking: !isChunkingUnsupported(fileType),
       };
     }, [fileType, sourceType, metadata?.emoji, name]);
 
     const { isSupportedForChunking, isPage, isFolder, emoji } = computedValues;
 
-    // Memoize drag data to prevent recreation
     const dragData = useMemo(
       () => ({
         fileType,
@@ -175,10 +222,9 @@ const FileListItem = memo<FileListItemProps>(
       [fileType, isFolder, name, sourceType],
     );
 
-    // Native HTML5 drag event handlers
     const handleDragStart = useCallback(
       (e: DragEvent) => {
-        if (!libraryId) {
+        if (!resourceManagerState.libraryId) {
           e.preventDefault();
           return;
         }
@@ -197,7 +243,7 @@ const FileListItem = memo<FileListItemProps>(
         }
         e.dataTransfer.effectAllowed = 'move';
       },
-      [libraryId, dragData, id, isFolder, setCurrentDrag],
+      [resourceManagerState.libraryId, dragData, id, isFolder, setCurrentDrag],
     );
 
     const handleDragEnd = useCallback(() => {
@@ -220,7 +266,6 @@ const FileListItem = memo<FileListItemProps>(
     }, []);
 
     const handleDrop = useCallback(() => {
-      // Clear the highlight after drop
       setIsOver(false);
     }, []);
 
@@ -233,7 +278,7 @@ const FileListItem = memo<FileListItemProps>(
       [createdAt],
     );
 
-    const handleRenameStart = () => {
+    const handleRenameStart = useCallback(() => {
       setIsRenaming(true);
       setRenamingValue(name);
       // Focus input after render
@@ -241,183 +286,213 @@ const FileListItem = memo<FileListItemProps>(
         inputRef.current?.focus();
         inputRef.current?.select();
       }, 0);
-    };
+    }, [name]);
 
-    const setMode = useResourceManagerStore((s) => s.setMode);
-    const setCurrentViewItemId = useResourceManagerStore((s) => s.setCurrentViewItemId);
+    const handleRenameConfirm = useCallback(async () => {
+      // Prevent duplicate calls (e.g., from both Enter key and onBlur)
+      if (isConfirmingRef.current) return;
+      isConfirmingRef.current = true;
 
-    const handleRenameConfirm = async () => {
       if (!renamingValue.trim()) {
         message.error(t('FileManager.actions.renameError'));
+        isConfirmingRef.current = false;
         return;
       }
 
       if (renamingValue.trim() === name) {
         setIsRenaming(false);
+        isConfirmingRef.current = false;
         return;
       }
 
       try {
-        await renameFolder(id, renamingValue.trim());
+        // Use optimistic updateResource for instant UI update
+        await fileStoreState.updateResource(id, { name: renamingValue.trim() });
+        if (resourceManagerState.libraryId) {
+          await clearTreeFolderCache(resourceManagerState.libraryId);
+        }
+        await fileStoreState.refreshFileList();
+
         message.success(t('FileManager.actions.renameSuccess'));
         setIsRenaming(false);
       } catch (error) {
         console.error('Rename error:', error);
         message.error(t('FileManager.actions.renameError'));
+      } finally {
+        isConfirmingRef.current = false;
       }
-    };
+    }, [
+      fileStoreState.refreshFileList,
+      fileStoreState.updateResource,
+      id,
+      message,
+      name,
+      renamingValue,
+      resourceManagerState.libraryId,
+      t,
+    ]);
 
-    const handleRenameCancel = () => {
+    const handleRenameCancel = useCallback(() => {
+      // Don't cancel if we're in the middle of confirming
+      if (isConfirmingRef.current) return;
       setIsRenaming(false);
       setRenamingValue(name);
-    };
+    }, [name]);
+
+    // Use shared click handler hook
+    const handleItemClick = useFileItemClick({
+      id,
+      isFolder,
+      isPage,
+      libraryId: resourceManagerState.libraryId,
+      slug,
+    });
 
     // Auto-start renaming if this is the pending rename item
     useEffect(() => {
       if (pendingRenameItemId === id && isFolder && !isRenaming) {
         handleRenameStart();
-        // Clear the pending rename item after triggering
-        setPendingRenameItemId(null);
+        resourceManagerState.setPendingRenameItemId(null);
       }
-    }, [pendingRenameItemId, id, isFolder]);
+    }, [pendingRenameItemId, id, isFolder, resourceManagerState]);
+
+    const { menuItems } = useFileItemDropdown({
+      fileType,
+      filename: name,
+      id,
+      libraryId: resourceManagerState.libraryId,
+      onRenameStart: isFolder ? handleRenameStart : undefined,
+      sourceType,
+      url,
+    });
 
     return (
-      <Flexbox
-        align={'center'}
-        className={cx(
-          styles.container,
-          selected && styles.selected,
-          isDragging && styles.dragging,
-          isOver && styles.dragOver,
-        )}
-        data-drop-target-id={id}
-        data-is-folder={String(isFolder)}
-        draggable={!!libraryId}
-        height={48}
-        horizontal
-        onDragEnd={handleDragEnd}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDragStart={handleDragStart}
-        onDrop={handleDrop}
-        paddingInline={8}
-        style={{
-          borderBlockEnd: `1px solid ${cssVar.colorBorderSecondary}`,
-        }}
-      >
+      <ContextMenuTrigger items={menuItems}>
         <Flexbox
           align={'center'}
-          className={styles.item}
-          distribution={'space-between'}
-          flex={1}
+          className={cx(
+            styles.container,
+            'file-list-item-group',
+            index % 2 === 0 && styles.evenRow,
+            selected && styles.selected,
+            isDragging && styles.dragging,
+            isOver && styles.dragOver,
+          )}
+          data-drop-target-id={id}
+          data-is-folder={String(isFolder)}
+          data-row-index={index}
+          draggable={!!resourceManagerState.libraryId}
+          height={48}
           horizontal
-          onClick={() => {
-            if (isFolder) {
-              // Navigate to folder using slug-based routing (Google Drive style)
-              const folderSlug = slug || id;
-
-              if (libraryId) {
-                navigate(`/resource/library/${libraryId}/${folderSlug}`);
-              }
-            } else if (isPage) {
-              setCurrentViewItemId(id);
-              setMode('page');
-              setSearchParams(
-                (prev) => {
-                  const newParams = new URLSearchParams(prev);
-                  newParams.set('file', id);
-                  return newParams;
-                },
-                { replace: true },
-              );
-            } else {
-              // Set mode to file and store the file ID
-              setCurrentViewItemId(id);
-              setMode('editor');
-              // Also update URL query parameter for shareable links
-              setSearchParams(
-                (prev) => {
-                  const newParams = new URLSearchParams(prev);
-                  newParams.set('file', id);
-                  return newParams;
-                },
-                { replace: true },
-              );
-            }
+          onDragEnd={handleDragEnd}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDragStart={handleDragStart}
+          onDrop={handleDrop}
+          onMouseEnter={() => onHoverChange(true)}
+          onMouseLeave={() => onHoverChange(false)}
+          paddingInline={8}
+          style={{
+            borderBlockEnd: `1px solid ${cssVar.colorBorderSecondary}`,
+            userSelect: 'none',
           }}
         >
-          <Flexbox align={'center'} className={styles.nameContainer} horizontal>
-            <Center
-              height={48}
-              onClick={(e) => {
-                e.stopPropagation();
-
-                onSelectedChange(id, !selected, e.shiftKey, index);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{ paddingInline: 4 }}
-            >
-              <Checkbox checked={selected} />
-            </Center>
-            <Flexbox
-              align={'center'}
-              justify={'center'}
-              style={{ fontSize: 24, marginInline: 8, width: 24 }}
-            >
-              {isFolder ? (
-                <Icon icon={FolderIcon} size={24} />
-              ) : isPage ? (
-                emoji ? (
-                  <span style={{ fontSize: 24 }}>{emoji}</span>
-                ) : (
-                  <Center height={24} width={24}>
-                    <Icon icon={FileText} size={24} />
-                  </Center>
-                )
-              ) : (
-                <FileIcon fileName={name} fileType={fileType} size={24} />
-              )}
-            </Flexbox>
-            {isRenaming && isFolder ? (
-              <Input
-                onBlur={handleRenameConfirm}
-                onChange={(e) => setRenamingValue(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleRenameConfirm();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    handleRenameCancel();
-                  }
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                ref={inputRef}
-                size="small"
-                style={{ flex: 1, maxWidth: 400 }}
-                value={renamingValue}
-              />
-            ) : (
-              <span className={styles.name}>{name || t('file:pageList.untitled')}</span>
-            )}
-          </Flexbox>
-          <Flexbox
-            align={'center'}
-            gap={8}
-            horizontal
+          <Center
+            height={40}
             onClick={(e) => {
               e.stopPropagation();
+
+              onSelectedChange(id, !selected, e.shiftKey, index);
             }}
-            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              // Prevent text selection when shift-clicking for batch selection
+              if (e.shiftKey) {
+                e.preventDefault();
+              }
+            }}
+            style={{ paddingInline: 4 }}
           >
-            {!isFolder &&
-              (isCreatingFileParseTask || isNull(chunkingStatus) || !chunkingStatus ? (
-                <div className={isCreatingFileParseTask ? undefined : styles.hover}>
-                  <Tooltip
-                    styles={{
-                      root: { pointerEvents: 'none' },
-                    }}
+            <Checkbox checked={selected} />
+          </Center>
+          <Flexbox
+            align={'center'}
+            className={styles.item}
+            distribution={'space-between'}
+            horizontal
+            onClick={handleItemClick}
+            style={{
+              flexShrink: 0,
+              maxWidth: columnWidths.name,
+              minWidth: columnWidths.name,
+              paddingInline: 8,
+              width: columnWidths.name,
+            }}
+          >
+            <Flexbox align={'center'} className={styles.nameContainer} horizontal>
+              <Flexbox
+                align={'center'}
+                justify={'center'}
+                style={{ fontSize: 24, marginInline: 8, width: 24 }}
+              >
+                {isFolder ? (
+                  <Icon icon={FolderIcon} size={24} />
+                ) : isPage ? (
+                  emoji ? (
+                    <span style={{ fontSize: 24 }}>{emoji}</span>
+                  ) : (
+                    <Center height={24} width={24}>
+                      <Icon icon={FileText} size={24} />
+                    </Center>
+                  )
+                ) : (
+                  <FileIcon fileName={name} fileType={fileType} size={24} />
+                )}
+              </Flexbox>
+              {isRenaming && isFolder ? (
+                <Input
+                  onBlur={handleRenameConfirm}
+                  onChange={(e) => setRenamingValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRenameConfirm();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleRenameCancel();
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  ref={inputRef}
+                  size="small"
+                  style={{ flex: 1, maxWidth: 400 }}
+                  value={renamingValue}
+                />
+              ) : (
+                <TruncatedFileName
+                  className={styles.name}
+                  name={name || t('file:pageList.untitled')}
+                />
+              )}
+            </Flexbox>
+            <Flexbox
+              align={'center'}
+              gap={8}
+              horizontal
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              paddingInline={8}
+            >
+              {!isFolder &&
+                !isPage &&
+                (fileStoreState.isCreatingFileParseTask ||
+                isNull(chunkingStatus) ||
+                !chunkingStatus ? (
+                  <div
+                    className={fileStoreState.isCreatingFileParseTask ? undefined : styles.hover}
                     title={t(
                       isSupportedForChunking
                         ? 'FileManager.actions.chunkingTooltip'
@@ -427,58 +502,73 @@ const FileListItem = memo<FileListItemProps>(
                     <Button
                       disabled={!isSupportedForChunking}
                       icon={FileBoxIcon}
-                      loading={isCreatingFileParseTask}
+                      loading={fileStoreState.isCreatingFileParseTask}
                       onClick={() => {
-                        parseFiles([id]);
+                        fileStoreState.parseFiles([id]);
                       }}
                       size={'small'}
                       type={'text'}
                     >
                       {t(
-                        isCreatingFileParseTask
+                        fileStoreState.isCreatingFileParseTask
                           ? 'FileManager.actions.createChunkingTask'
                           : 'FileManager.actions.chunking',
                       )}
                     </Button>
-                  </Tooltip>
-                </div>
-              ) : (
-                <div style={{ cursor: 'default' }}>
-                  <ChunksBadge
-                    chunkCount={chunkCount}
-                    chunkingError={chunkingError}
-                    chunkingStatus={chunkingStatus}
-                    embeddingError={embeddingError}
-                    embeddingStatus={embeddingStatus}
-                    finishEmbedding={finishEmbedding}
-                    id={id}
-                  />
-                </div>
-              ))}
-            <div className={styles.hover}>
-              <DropdownMenu
-                fileType={fileType}
-                filename={name}
-                id={id}
-                knowledgeBaseId={libraryId}
-                onRenameStart={isFolder ? handleRenameStart : undefined}
-                sourceType={sourceType}
-                url={url}
-              />
-            </div>
+                  </div>
+                ) : (
+                  <div style={{ cursor: 'default' }}>
+                    <ChunksBadge
+                      chunkCount={chunkCount}
+                      chunkingError={chunkingError}
+                      chunkingStatus={chunkingStatus}
+                      embeddingError={embeddingError}
+                      embeddingStatus={embeddingStatus}
+                      finishEmbedding={finishEmbedding}
+                      id={id}
+                    />
+                  </div>
+                ))}
+              <DropdownMenu className={styles.hover} items={menuItems} />
+            </Flexbox>
           </Flexbox>
+          {!isDragging && (
+            <>
+              <Flexbox className={styles.item} style={{ flexShrink: 0 }} width={columnWidths.date}>
+                {displayTime}
+              </Flexbox>
+              <Flexbox className={styles.item} style={{ flexShrink: 0 }} width={columnWidths.size}>
+                {isFolder || isPage ? '-' : formatSize(size)}
+              </Flexbox>
+            </>
+          )}
         </Flexbox>
-        {!isDragging && (
-          <>
-            <Flexbox className={styles.item} width={FILE_DATE_WIDTH}>
-              {displayTime}
-            </Flexbox>
-            <Flexbox className={styles.item} width={FILE_SIZE_WIDTH}>
-              {isFolder || isPage ? '-' : formatSize(size)}
-            </Flexbox>
-          </>
-        )}
-      </Flexbox>
+      </ContextMenuTrigger>
+    );
+  },
+  // Custom comparison function to prevent unnecessary re-renders
+  (prevProps, nextProps) => {
+    return (
+      prevProps.id === nextProps.id &&
+      prevProps.name === nextProps.name &&
+      prevProps.selected === nextProps.selected &&
+      prevProps.chunkingStatus === nextProps.chunkingStatus &&
+      prevProps.embeddingStatus === nextProps.embeddingStatus &&
+      prevProps.chunkCount === nextProps.chunkCount &&
+      prevProps.chunkingError === nextProps.chunkingError &&
+      prevProps.embeddingError === nextProps.embeddingError &&
+      prevProps.finishEmbedding === nextProps.finishEmbedding &&
+      prevProps.pendingRenameItemId === nextProps.pendingRenameItemId &&
+      prevProps.size === nextProps.size &&
+      prevProps.createdAt === nextProps.createdAt &&
+      prevProps.fileType === nextProps.fileType &&
+      prevProps.sourceType === nextProps.sourceType &&
+      prevProps.slug === nextProps.slug &&
+      prevProps.url === nextProps.url &&
+      prevProps.columnWidths.name === nextProps.columnWidths.name &&
+      prevProps.columnWidths.date === nextProps.columnWidths.date &&
+      prevProps.columnWidths.size === nextProps.columnWidths.size &&
+      prevProps.isAnyRowHovered === nextProps.isAnyRowHovered
     );
   },
 );

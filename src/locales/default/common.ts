@@ -3,9 +3,9 @@ export default {
   'advanceSettings': 'Advanced Settings',
   'alert.cloud.action': 'Try now',
   'alert.cloud.desc':
-    'All registered users get {{credit}} free computing credits—no setup needed. Includes global cloud sync and advanced web search.',
+    'All registered users get {{credit}} free computing credits per month—no setup needed. Includes global cloud sync and advanced web search.',
   'alert.cloud.descOnMobile':
-    'All registered users get {{credit}} free computing credits—no setup needed.',
+    'All registered users get {{credit}} free computing credits per month—no setup needed.',
   'alert.cloud.title': '{{name}} beta is live',
   'appLoading.appIdle': 'Ready to start',
   'appLoading.appInitializing': 'Application is starting...',
@@ -34,6 +34,7 @@ export default {
     'Current topic is not saved, please save it first to use subtopic feature',
   'cancel': 'Cancel',
   'changelog': 'Changelog',
+  'checkForUpdates': 'Check for Updates',
   'clientDB.autoInit.title': 'Initializing PGlite Database',
   'clientDB.error.desc':
     'PGlite failed to initialize. Retry first. If it helps, open Self-serve fixes and follow the steps. Still stuck after a few tries? Use Report issue to send us the error details.',
@@ -113,10 +114,12 @@ export default {
   'cmdk.askAI': 'Ask Agent',
   'cmdk.askAIHeading': 'Use the following features for {{query}}',
   'cmdk.askAIHeadingEmpty': 'Choose an AI feature',
+  'cmdk.askAgentHeading': 'Ask Agent',
+  'cmdk.askAgentPlaceholder': 'Ask {{agent}} something...',
   'cmdk.askLobeAI': 'Ask Lobe AI',
   'cmdk.community': 'Community',
   'cmdk.communitySupport': 'Community Support',
-  'cmdk.contactViaEmail': 'Contact us via email',
+  'cmdk.contactUs': 'Contact Us',
   'cmdk.context.agent': 'Agent',
   'cmdk.context.community': 'Community',
   'cmdk.context.general': 'General',
@@ -128,30 +131,111 @@ export default {
   'cmdk.context.settings': 'Settings',
   'cmdk.discover': 'Discover',
   'cmdk.keyboard.ESC': 'ESC',
+  'cmdk.keyboard.Enter': 'Enter',
   'cmdk.keyboard.Tab': 'Tab',
+
+  'cmdk.keywords.about': 'about version info',
+
+  'cmdk.keywords.apikey': 'apikey api key token',
+
+  'cmdk.keywords.appearance': 'common appearance theme display',
+
+  'cmdk.keywords.billing': 'billing payment invoice transaction',
+
+  'cmdk.keywords.community': 'discover market assistant model provider mcp',
+
+  // CMDK search keywords (space-separated for i18n)
+  'cmdk.keywords.contactUs': 'feedback issue bug problem',
+
+  'cmdk.keywords.discord': 'discord help support customer service',
+
+  'cmdk.keywords.funds': 'funds balance credit money',
+
+  'cmdk.keywords.hotkey': 'hotkey shortcut keyboard',
+
+  'cmdk.keywords.image': 'image picture photo',
+
+  'cmdk.keywords.memory': 'identities contexts preferences experiences',
+
+  'cmdk.keywords.pages': 'documents write notes',
+
+  'cmdk.keywords.painting': 'painting art generate draw',
+
+  'cmdk.keywords.plans': 'subscription plan upgrade pricing',
+
+  'cmdk.keywords.profile': 'profile user account personal',
+
+  'cmdk.keywords.provider': 'provider llm model ai',
+
+  'cmdk.keywords.proxy': 'proxy network connection',
+
+  'cmdk.keywords.referral': 'referral rewards invite bonus',
+
+  'cmdk.keywords.resources': 'knowledge files library documents',
+
+  'cmdk.keywords.settings': 'settings preferences configuration options',
+
+  'cmdk.keywords.starGitHub': 'github star favorite like',
+
+  'cmdk.keywords.stats': 'stats statistics analytics',
+
+  'cmdk.keywords.submitIssue': 'issue bug problem feedback',
+
+  'cmdk.keywords.usage': 'usage statistics consumption quota',
+
   'cmdk.memory': 'Memory',
+
+  'cmdk.mentionAgent': 'Mention Agent',
+
   'cmdk.navigate': 'Navigate',
+
   'cmdk.newAgent': 'Create New Agent',
+
   'cmdk.newAgentTeam': 'Create New Group',
-  'cmdk.newLibrary': 'New Library',
-  'cmdk.newPage': 'New Page',
-  'cmdk.newTopic': 'New topic in current Agent',
-  'cmdk.noResults': 'No results found',
+
+  'cmdk.newLibrary': 'Create New Library',
+
+  'cmdk.newPage': 'Create New Page',
+
+  'cmdk.newTopic': 'New Topic in Current Agent',
+
+  'cmdk.noResults': 'No Results found',
+
   'cmdk.openSettings': 'Open Settings',
+
   'cmdk.pages': 'Pages',
+
   'cmdk.painting': 'Painting',
+
   'cmdk.resource': 'Resources',
+
   'cmdk.search.agent': 'Agent',
+
   'cmdk.search.agents': 'Agents',
+
   'cmdk.search.assistant': 'Agent',
+
   'cmdk.search.assistants': 'Agents',
+
   'cmdk.search.communityAgent': 'Community Agent',
+
   'cmdk.search.file': 'File',
+
   'cmdk.search.files': 'Files',
+
+  'cmdk.search.folder': 'Folder',
+
+  'cmdk.search.folders': 'Folders',
+
   'cmdk.search.loading': 'Searching...',
+
   'cmdk.search.market': 'Community',
+
   'cmdk.search.mcp': 'MCP Server',
+
   'cmdk.search.mcps': 'MCP Servers',
+  'cmdk.search.memories': 'Memories',
+  'cmdk.search.memory': 'Memory',
   'cmdk.search.message': 'Message',
   'cmdk.search.messages': 'Messages',
   'cmdk.search.page': 'Page',
@@ -163,6 +247,7 @@ export default {
   'cmdk.search.topic': 'Topic',
   'cmdk.search.topics': 'Topics',
   'cmdk.searchPlaceholder': 'Enter a command or search...',
+  'cmdk.sendToAgent': 'Send to {{agent}}',
   'cmdk.settings': 'Settings',
   'cmdk.starOnGitHub': 'Star us on GitHub',
   'cmdk.submitIssue': 'Submit Issue',
@@ -172,11 +257,12 @@ export default {
   'cmdk.themeLight': 'Light',
   'cmdk.toOpen': 'Open',
   'cmdk.toSelect': 'Select',
+
   'confirm': 'Confirm',
   'contact': 'Contact Us',
   'copy': 'Copy',
   'copyFail': 'Copy failed',
-  'copySuccess': 'Copied successfully',
+  'copySuccess': 'Copied',
   'dataStatistics.messages': 'Messages',
   'dataStatistics.sessions': 'Agents',
   'dataStatistics.today': "Today's New",
@@ -186,6 +272,7 @@ export default {
   'delete': 'Delete',
   'document': 'User Manual',
   'download': 'Download',
+  'downloadClient': 'Download Client',
   'duplicate': 'Duplicate',
   'edit': 'Edit',
   'errors.invalidFileFormat': 'Invalid file format',
@@ -198,6 +285,27 @@ export default {
   'exportType.allAgentWithMessage': 'Export All Agents and Messages',
   'exportType.globalSetting': 'Export Global Settings',
   'feedback': 'Feedback',
+  'feedback.errors.fileTooLarge': 'File exceeds 5MB',
+  'feedback.errors.submitFailed': 'Submit failed. Try again.',
+  'feedback.errors.teamNotFound': 'Configuration error',
+  'feedback.errors.uploadFailed': 'Upload failed',
+  'feedback.fields.message.label': 'Message',
+  'feedback.fields.message.maxLength': 'Message must be 5000 characters or less',
+  'feedback.fields.message.placeholder': 'Tell us more...',
+  'feedback.fields.message.required': 'Please enter a message',
+  'feedback.fields.screenshot.hint': 'Max 5MB. PNG, JPG, GIF',
+  'feedback.fields.screenshot.label': 'Screenshot (optional)',
+  'feedback.fields.screenshot.remove': 'Remove',
+  'feedback.fields.screenshot.upload': 'Upload Screenshot',
+  'feedback.fields.screenshot.uploading': 'Uploading...',
+  'feedback.fields.title.label': 'Title',
+  'feedback.fields.title.maxLength': 'Title must be 200 characters or less',
+  'feedback.fields.title.placeholder': 'Brief summary of your question or feedback',
+  'feedback.fields.title.required': 'Please enter a title',
+  'feedback.screenshotUploaded': 'Screenshot uploaded',
+  'feedback.submit': 'Submit Feedback',
+  'feedback.success': 'Thank you! Your feedback has been submitted.',
+  'feedback.title': 'How can we help?',
   'follow': 'Follow us on {{name}}',
   'footer.action.feedback': 'Share feedback',
   'footer.action.star': 'Star on GitHub',
@@ -313,6 +421,9 @@ export default {
   'pin': 'Pin',
   'pinOff': 'Unpin',
   'privacy': 'Privacy Policy',
+  'productHunt.actionLabel': 'Support us',
+  'productHunt.description': 'Support us on Product Hunt. Your support means a lot to us!',
+  'productHunt.title': "We're on Product Hunt!",
   'regenerate': 'Regenerate',
   'releaseNotes': 'Version Details',
   'rename': 'Rename',
@@ -321,6 +432,13 @@ export default {
   'run': 'Run',
   'save': 'Save',
   'send': 'Send',
+  'serverVersionOutdated.desc':
+    'Your client version (v{{version}}) requires a newer server version.',
+  'serverVersionOutdated.dismiss': 'Continue Anyway',
+  'serverVersionOutdated.title': 'Server Version Outdated',
+  'serverVersionOutdated.upgrade': 'Upgrade Guide',
+  'serverVersionOutdated.warning':
+    'Some features may not work properly or behave unexpectedly. Please update your server for the best experience.',
   'setting': 'Settings',
   'share': 'Share',
   'stop': 'Stop',
@@ -370,8 +488,9 @@ export default {
   'update': 'Update',
   'updateAgent': 'Update Agent Information',
   'upgradeVersion.action': 'Upgrade',
-  'upgradeVersion.hasNew': 'New update available',
-  'upgradeVersion.newVersion': 'New version available: {{version}}',
+  'upgradeVersion.hasNew': 'Update available',
+  'upgradeVersion.newVersion': 'Update available: {{version}}',
+  'upgradeVersion.serverVersion': 'Server: {{version}}',
   'userPanel.anonymousNickName': 'Anonymous User',
   'userPanel.billing': 'Billing Management',
   'userPanel.cloud': 'Launch {{name}}',
@@ -381,7 +500,7 @@ export default {
   'userPanel.discord': 'Community Support',
   'userPanel.docs': 'Documentation',
   'userPanel.email': 'Email Support',
-  'userPanel.feedback': 'Feedback and Suggestions',
+  'userPanel.feedback': 'Contact Us',
   'userPanel.help': 'Help Center',
   'userPanel.moveGuide': 'The settings button has been moved here',
   'userPanel.plans': 'Subscription Plans',

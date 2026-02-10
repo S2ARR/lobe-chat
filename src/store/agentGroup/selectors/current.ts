@@ -1,6 +1,9 @@
-import type { AgentGroupDetail, AgentGroupMember, AgentItem } from '@lobechat/types';
-
-import { DEFAULT_CHAT_GROUP_CHAT_CONFIG, DEFAULT_CHAT_GROUP_META_CONFIG } from '@/const/settings';
+import {
+  DEFAULT_AVATAR,
+  DEFAULT_CHAT_GROUP_CHAT_CONFIG,
+  DEFAULT_CHAT_GROUP_META_CONFIG,
+} from '@lobechat/const';
+import type { AgentGroupDetail, AgentGroupMember } from '@lobechat/types';
 
 import type { ChatGroupState } from '../initialState';
 import type { ChatGroupStore } from '../store';
@@ -33,7 +36,7 @@ const currentGroupMeta = (s: ChatGroupStore) => {
   return groupId ? agentGroupByIdSelectors.groupMeta(groupId)(s) : DEFAULT_CHAT_GROUP_META_CONFIG;
 };
 
-const currentGroupAgents = (s: ChatGroupStore): AgentItem[] => {
+const currentGroupAgents = (s: ChatGroupStore): AgentGroupMember[] => {
   const groupId = activeGroupId(s);
   return groupId ? agentGroupByIdSelectors.groupAgents(groupId)(s) : [];
 };
@@ -41,6 +44,14 @@ const currentGroupAgents = (s: ChatGroupStore): AgentItem[] => {
 const currentGroupMembers = (s: ChatGroupStore): AgentGroupMember[] => {
   const groupId = activeGroupId(s);
   return groupId ? agentGroupByIdSelectors.groupMembers(groupId)(s) : [];
+};
+
+const currentGroupMemberAvatars = (s: ChatGroupStore) => {
+  const members = currentGroupMembers(s);
+  return members.map((agent) => ({
+    avatar: agent.avatar || DEFAULT_AVATAR,
+    background: agent.backgroundColor || undefined,
+  }));
 };
 
 const getAllGroups = (s: ChatGroupState): AgentGroupDetail[] => Object.values(s.groupMap);
@@ -59,6 +70,7 @@ export const currentSelectors = {
   currentGroup,
   currentGroupAgents,
   currentGroupConfig,
+  currentGroupMemberAvatars,
   currentGroupMembers,
   currentGroupMeta,
   currentGroupOpeningMessage,

@@ -1,13 +1,36 @@
+import {
+  AgentBuilderInspectors,
+  AgentBuilderManifest,
+} from '@lobechat/builtin-tool-agent-builder/client';
+import {
+  CloudSandboxIdentifier,
+  CloudSandboxInspectors,
+} from '@lobechat/builtin-tool-cloud-sandbox/client';
+import {
+  GroupAgentBuilderInspectors,
+  GroupAgentBuilderManifest,
+} from '@lobechat/builtin-tool-group-agent-builder/client';
+import {
+  GroupManagementInspectors,
+  GroupManagementManifest,
+} from '@lobechat/builtin-tool-group-management/client';
 import { GTDInspectors, GTDManifest } from '@lobechat/builtin-tool-gtd/client';
-import { LocalSystemManifest } from '@lobechat/builtin-tool-local-system';
-import { PageAgentIdentifier, PageAgentInspectors } from '@lobechat/builtin-tool-page-agent/client';
+import {
+  KnowledgeBaseInspectors,
+  KnowledgeBaseManifest,
+} from '@lobechat/builtin-tool-knowledge-base/client';
+import {
+  LocalSystemInspectors,
+  LocalSystemManifest,
+} from '@lobechat/builtin-tool-local-system/client';
+import { MemoryInspectors, MemoryManifest } from '@lobechat/builtin-tool-memory/client';
+import { NotebookInspectors, NotebookManifest } from '@lobechat/builtin-tool-notebook/client';
+import { PageAgentInspectors, PageAgentManifest } from '@lobechat/builtin-tool-page-agent/client';
+import {
+  WebBrowsingInspectors,
+  WebBrowsingManifest,
+} from '@lobechat/builtin-tool-web-browsing/client';
 import { type BuiltinInspector } from '@lobechat/types';
-
-import { CodeInterpreterInspectors } from './code-interpreter/Inspector';
-import { CodeInterpreterIdentifier } from './code-interpreter/index';
-import { LocalSystemInspectors } from './local-system/Inspector';
-import { WebBrowsingInspectors } from './web-browsing/Inspector';
-import { WebBrowsingManifest } from './web-browsing/index';
 
 /**
  * Builtin tools inspector registry
@@ -17,11 +40,23 @@ import { WebBrowsingManifest } from './web-browsing/index';
  * of tool calls in the conversation UI.
  */
 const BuiltinToolInspectors: Record<string, Record<string, BuiltinInspector>> = {
-  [CodeInterpreterIdentifier]: CodeInterpreterInspectors as Record<string, BuiltinInspector>,
-  [LocalSystemManifest.identifier]: LocalSystemInspectors as Record<string, BuiltinInspector>,
-  [PageAgentIdentifier]: PageAgentInspectors as Record<string, BuiltinInspector>,
-  [WebBrowsingManifest.identifier]: WebBrowsingInspectors as Record<string, BuiltinInspector>,
+  [AgentBuilderManifest.identifier]: AgentBuilderInspectors as Record<string, BuiltinInspector>,
+  [CloudSandboxIdentifier]: CloudSandboxInspectors as Record<string, BuiltinInspector>,
+  [GroupAgentBuilderManifest.identifier]: GroupAgentBuilderInspectors as Record<
+    string,
+    BuiltinInspector
+  >,
+  [GroupManagementManifest.identifier]: GroupManagementInspectors as Record<
+    string,
+    BuiltinInspector
+  >,
   [GTDManifest.identifier]: GTDInspectors as Record<string, BuiltinInspector>,
+  [KnowledgeBaseManifest.identifier]: KnowledgeBaseInspectors as Record<string, BuiltinInspector>,
+  [LocalSystemManifest.identifier]: LocalSystemInspectors as Record<string, BuiltinInspector>,
+  [MemoryManifest.identifier]: MemoryInspectors as Record<string, BuiltinInspector>,
+  [NotebookManifest.identifier]: NotebookInspectors as Record<string, BuiltinInspector>,
+  [PageAgentManifest.identifier]: PageAgentInspectors as Record<string, BuiltinInspector>,
+  [WebBrowsingManifest.identifier]: WebBrowsingInspectors as Record<string, BuiltinInspector>,
 };
 
 /**

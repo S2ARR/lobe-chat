@@ -23,6 +23,9 @@ export const notebookRouter = router({
       z.object({
         content: z.string(),
         description: z.string(),
+        metadata: z.record(z.string(), z.any()).optional(),
+        source: z.string().optional().default('notebook'),
+        sourceType: z.enum(['file', 'web', 'api', 'topic']).optional().default('api'),
         title: z.string(),
         topicId: z.string(),
         type: z
@@ -37,8 +40,9 @@ export const notebookRouter = router({
         content: input.content,
         description: input.description,
         fileType: input.type,
-        source: 'notebook',
-        sourceType: 'api',
+        metadata: input.metadata,
+        source: input.source,
+        sourceType: input.sourceType,
         title: input.title,
         totalCharCount: input.content.length,
         totalLineCount: input.content.split('\n').length,
@@ -90,6 +94,7 @@ export const notebookRouter = router({
           description: doc.description,
           fileType: doc.fileType,
           id: doc.id,
+          metadata: doc.metadata,
           title: doc.title,
           totalCharCount: doc.totalCharCount,
           totalLineCount: doc.totalLineCount,
@@ -106,6 +111,7 @@ export const notebookRouter = router({
         content: z.string().optional(),
         description: z.string().optional(),
         id: z.string(),
+        metadata: z.record(z.string(), z.any()).optional(),
         title: z.string().optional(),
       }),
     )
@@ -127,6 +133,7 @@ export const notebookRouter = router({
           totalLineCount: contentToUpdate.split('\n').length,
         }),
         ...(input.description !== undefined && { description: input.description }),
+        ...(input.metadata !== undefined && { metadata: input.metadata }),
         ...(input.title && { title: input.title }),
       });
 

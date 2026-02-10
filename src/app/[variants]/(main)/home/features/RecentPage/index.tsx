@@ -1,12 +1,13 @@
 'use client';
 
-import { ActionIcon, Dropdown } from '@lobehub/ui';
-import { FileTextIcon, Loader2Icon, MoreHorizontal } from 'lucide-react';
+import { ActionIcon, DropdownMenu } from '@lobehub/ui';
+import { FileTextIcon, MoreHorizontal } from 'lucide-react';
 import { Suspense, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/features/store';
+import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { useInitRecentPage } from '@/hooks/useInitRecentPage';
 import { useHomeStore } from '@/store/home';
 import { homeRecentSelectors } from '@/store/home/selectors';
@@ -35,23 +36,21 @@ const RecentPage = memo(() => {
     <GroupBlock
       action={
         <>
-          {isRevalidating && <ActionIcon icon={Loader2Icon} loading size={'small'} />}
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'all-documents',
-                  label: t('menu.allPages'),
-                  onClick: () => {
-                    setCategory(FilesTabs.Pages);
-                    navigate('/resource');
-                  },
+          {isRevalidating && <NeuralNetworkLoading size={14} />}
+          <DropdownMenu
+            items={[
+              {
+                key: 'all-documents',
+                label: t('menu.allPages'),
+                onClick: () => {
+                  setCategory(FilesTabs.Pages);
+                  navigate('/resource');
                 },
-              ],
-            }}
+              },
+            ]}
           >
             <ActionIcon icon={MoreHorizontal} size="small" />
-          </Dropdown>
+          </DropdownMenu>
         </>
       }
       icon={FileTextIcon}

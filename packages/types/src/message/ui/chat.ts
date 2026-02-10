@@ -1,4 +1,3 @@
-import { MetaData } from '../../meta';
 import { GroundingSearch } from '../../search';
 import { ThreadStatus } from '../../topic/thread';
 import {
@@ -25,6 +24,8 @@ export type UIMessageRoleType =
   | 'assistant'
   | 'tool'
   | 'task'
+  | 'tasks'
+  | 'groupTasks'
   | 'supervisor'
   | 'assistantGroup'
   | 'agentCouncil'
@@ -64,12 +65,14 @@ interface UIMessageBranch {
  * Retrieved from the associated Thread via sourceMessageId
  */
 export interface TaskDetail {
+  /** Whether this task runs in client mode (local execution) */
+  clientMode?: boolean;
   /** Task completion time (ISO string) */
   completedAt?: string;
   /** Execution duration in milliseconds */
   duration?: number;
   /** Error message if task failed */
-  error?: string;
+  error?: Record<string, any>;
   /** Task start time (ISO string) */
   startedAt?: string;
   /** Task status */
@@ -103,10 +106,15 @@ export interface UIChatMessage {
    */
   children?: AssistantContentBlock[];
   chunksList?: ChatFileChunk[];
+  /**
+   * All messages within a compression group (role: 'compressedGroup')
+   * Used for rendering expanded view with conversation-flow parsing
+   */
+  compressedMessages?: UIChatMessage[];
   content: string;
   createdAt: number;
   error?: ChatMessageError | null;
-  // 扩展字段
+  // Extended fields
   extra?: ChatMessageExtra;
   fileList?: ChatFileItem[];
   /**
@@ -120,7 +128,6 @@ export interface UIChatMessage {
   id: string;
   imageList?: ChatImageItem[];
   members?: UIChatMessage[];
-  meta: MetaData;
   metadata?: MessageMetadata | null;
   model?: string | null;
   /**
@@ -176,15 +183,21 @@ export interface UIChatMessage {
    * Retrieved from the associated Thread via sourceMessageId
    */
   taskDetail?: TaskDetail;
+  /**
+   * Task messages for role='tasks' virtual message
+   * Contains aggregated task messages with same parentId
+   * Also used to store task execution messages (intermediate steps) from polling
+   */
+  tasks?: UIChatMessage[];
   threadId?: string | null;
   tool_call_id?: string;
   tools?: ChatToolPayload[];
   /**
-   * 保存到主题的消息
+   * Messages saved to topic
    */
   topicId?: string;
   /**
-   * 观测链路 id
+   * Observation trace ID
    */
   traceId?: string;
   updatedAt: number;

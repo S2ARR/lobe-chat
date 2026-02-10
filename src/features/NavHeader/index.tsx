@@ -1,8 +1,9 @@
-import { Flexbox, type FlexboxProps } from '@lobehub/ui';
+import { Flexbox, type FlexboxProps, TooltipGroup } from '@lobehub/ui';
 import { type CSSProperties, type ReactNode, memo } from 'react';
 
 import ToggleLeftPanelButton from '@/features/NavPanel/ToggleLeftPanelButton';
-import { useNavPanel } from '@/features/NavPanel/hooks/useNavPanel';
+import { useGlobalStore } from '@/store/global';
+import { systemStatusSelectors } from '@/store/global/selectors';
 
 export interface NavHeaderProps extends Omit<FlexboxProps, 'children'> {
   children?: ReactNode;
@@ -18,7 +19,8 @@ export interface NavHeaderProps extends Omit<FlexboxProps, 'children'> {
 
 const NavHeader = memo<NavHeaderProps>(
   ({ showTogglePanelButton = true, style, children, left, right, styles, ...rest }) => {
-    const { expand } = useNavPanel();
+    const expand = useGlobalStore(systemStatusSelectors.showLeftPanel);
+
     const noContent = !left && !right;
 
     if (noContent && expand) return;
@@ -35,18 +37,20 @@ const NavHeader = memo<NavHeaderProps>(
         style={style}
         {...rest}
       >
-        <Flexbox align={'center'} gap={2} horizontal justify={'flex-start'} style={styles?.left}>
-          {showTogglePanelButton && !expand && <ToggleLeftPanelButton />}
-          {left}
-        </Flexbox>
-        {children && (
-          <Flexbox flex={1} style={styles?.center}>
-            {children}
+        <TooltipGroup>
+          <Flexbox align={'center'} gap={2} horizontal justify={'flex-start'} style={styles?.left}>
+            {showTogglePanelButton && !expand && <ToggleLeftPanelButton />}
+            {left}
           </Flexbox>
-        )}
-        <Flexbox align={'center'} gap={2} horizontal justify={'flex-end'} style={styles?.right}>
-          {right}
-        </Flexbox>
+          {children && (
+            <Flexbox flex={1} style={styles?.center}>
+              {children}
+            </Flexbox>
+          )}
+          <Flexbox align={'center'} gap={2} horizontal justify={'flex-end'} style={styles?.right}>
+            {right}
+          </Flexbox>
+        </TooltipGroup>
       </Flexbox>
     );
   },

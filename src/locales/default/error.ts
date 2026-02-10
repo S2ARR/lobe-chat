@@ -1,10 +1,4 @@
-import { businessErrorsLocales } from '@/business/locales/errors';
-
 export default {
-  'clerkAuth.loginSuccess.action': 'Continue Session',
-  'clerkAuth.loginSuccess.desc':
-    "{{greeting}}, it's great to continue serving you. Let's pick up where we left off.",
-  'clerkAuth.loginSuccess.title': 'Welcome back, {{nickName}}',
   'error.backHome': 'Back to Home',
   'error.desc': 'Give it a try later, or go back to the known world.',
   'error.retry': 'Reload',
@@ -16,6 +10,19 @@ export default {
   'import.incompatible.description':
     'This file was exported from a higher version. Please try upgrading to the latest version and then re-importing.',
   'import.incompatible.title': 'Current application does not support importing this file',
+  'inviteCode.continue': 'Continue',
+  'inviteCode.currentEmail': 'Current account: {{email}}',
+  'inviteCode.desc':
+    'An invite code is required to access LobeHub. Please enter a valid invite code to continue.',
+  'inviteCode.friends': 'Ask a friend',
+  'inviteCode.joinUsOn': 'Join us on',
+  'inviteCode.lookingForInvite': 'Looking for an invite?',
+  'inviteCode.notYou': 'Not you?',
+  'inviteCode.openingInStages': 'is opening in stages.',
+  'inviteCode.placeholder': 'Invite code or link',
+  'inviteCode.pleaseEnterCode': 'Enter your invite code to continue.',
+  'inviteCode.switchAccount': 'Switch account',
+  'inviteCode.title': "You're Almost In",
   'loginRequired.desc': 'You will be redirected to the login page shortly',
   'loginRequired.title': 'Please log in to use this feature',
   'notFound.backHome': 'Back to Home',
@@ -137,8 +144,6 @@ export default {
     'Invalid access code or empty. Please enter the correct access code or add a custom API Key.',
   'response.InvalidBedrockCredentials':
     'Bedrock authentication failed. Please check the AccessKeyId/SecretAccessKey and retry.',
-  'response.InvalidClerkUser':
-    'Sorry, you are not currently logged in. Please log in or register an account to continue.',
   'response.InvalidComfyUIArgs':
     'Invalid ComfyUI configuration. Please check the settings and try again.',
   'response.InvalidGithubToken':
@@ -198,6 +203,8 @@ export default {
     'We apologize for the inconvenience. Due to a temporary system malfunction, your current subscription usage is inactive. Please click the button below to restore your subscription, or contact us via email for support.',
   'response.SubscriptionPlanLimit':
     'Your subscription points have been exhausted, and you cannot use this feature. Please upgrade to a higher plan or configure a custom model API to continue using it.',
+  'response.SubscriptionPlanLimitUltimate':
+    'Your subscription points have been exhausted, and you cannot use this feature. Please top up credits or configure a custom model API to continue using it.',
   'response.SystemTimeNotMatchError':
     'Sorry, your system time does not match the server. Please check your system time and try again.',
   'response.UnknownChatFetchError':
@@ -233,8 +240,9 @@ export default {
     'The current deployment mode does not support uploading non-image files. To upload files in {{ext}} format, please switch to server database deployment or use the {{cloud}} service.',
   'upload.networkError':
     "Please check your network connection and ensure that the file storage service's cross-origin configuration is correct.",
+  'upload.storageLimitExceeded':
+    'Your file storage has reached the plan limit. Please upgrade your plan or delete unused files to free up space.',
   'upload.title': 'File upload failed. Please check your network connection or try again later',
   'upload.unknownError': 'Error reason: {{reason}}',
   'upload.uploadFailed': 'File upload failed.',
-  ...businessErrorsLocales,
 };

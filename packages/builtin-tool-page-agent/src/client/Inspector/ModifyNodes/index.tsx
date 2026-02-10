@@ -1,35 +1,18 @@
 'use client';
 
+import type { ModifyNodesArgs } from '@lobechat/editor-runtime';
 import type { BuiltinInspectorProps } from '@lobechat/types';
-import { Icon } from '@lobehub/ui';
-import { createStaticStyles, cx } from 'antd-style';
+import { Icon, Text } from '@lobehub/ui';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { DiffIcon, Minus, Plus } from 'lucide-react';
 import { type ReactNode, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { shinyTextStyles } from '@/styles';
+import { oneLineEllipsis, shinyTextStyles } from '@/styles';
 
-import type { ModifyNodesArgs, ModifyNodesState } from '../../../types';
+import type { ModifyNodesState } from '../../../types';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
-  insert: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorSuccess};
-  `,
-  modify: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorWarning};
-  `,
-  remove: css`
-    font-family: ${cssVar.fontFamilyCode};
-    color: ${cssVar.colorError};
-  `,
-  root: css`
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-  `,
   separator: css`
     margin-inline: 2px;
     color: ${cssVar.colorTextQuaternary};
@@ -46,8 +29,11 @@ export const ModifyNodesInspector = memo<BuiltinInspectorProps<ModifyNodesArgs, 
 
     // Count operations by type
     const counts = useMemo(() => {
-      const operations = args?.operations || partialArgs?.operations || [];
-      return operations.reduce(
+      const ops = args?.operations || partialArgs?.operations;
+      // During streaming, operations may be a partial object instead of array
+      if (!Array.isArray(ops)) return { insert: 0, modify: 0, remove: 0 };
+
+      return ops.reduce(
         (acc, op) => {
           switch (op.action) {
             case 'insert': {
@@ -77,7 +63,7 @@ export const ModifyNodesInspector = memo<BuiltinInspectorProps<ModifyNodesArgs, 
     // During streaming without operations yet, show init message
     if (isArgumentsStreaming && !hasOperations) {
       return (
-        <div className={cx(styles.root, shinyTextStyles.shinyText)}>
+        <div className={cx(oneLineEllipsis, shinyTextStyles.shinyText)}>
           <span>{t('builtins.lobe-page-agent.apiName.modifyNodes.init')}</span>
         </div>
       );
@@ -87,31 +73,31 @@ export const ModifyNodesInspector = memo<BuiltinInspectorProps<ModifyNodesArgs, 
     const statsParts: ReactNode[] = [];
     if (counts.insert > 0) {
       statsParts.push(
-        <span className={styles.insert} key="insert">
+        <Text as={'span'} code color={cssVar.colorSuccess} fontSize={12} key="insert">
           <Icon icon={Plus} size={12} />
           {counts.insert}
-        </span>,
+        </Text>,
       );
     }
     if (counts.modify > 0) {
       statsParts.push(
-        <span className={styles.modify} key="modify">
+        <Text as={'span'} code color={cssVar.colorWarning} fontSize={12} key="modify">
           <Icon icon={DiffIcon} size={12} />
           {counts.modify}
-        </span>,
+        </Text>,
       );
     }
     if (counts.remove > 0) {
       statsParts.push(
-        <span className={styles.remove} key="remove">
+        <Text as={'span'} code color={cssVar.colorError} fontSize={12} key="remove">
           <Icon icon={Minus} size={12} />
           {counts.remove}
-        </span>,
+        </Text>,
       );
     }
 
     return (
-      <div className={cx(styles.root, isArgumentsStreaming && shinyTextStyles.shinyText)}>
+      <div className={cx(oneLineEllipsis, isArgumentsStreaming && shinyTextStyles.shinyText)}>
         <span className={styles.title}>{t('builtins.lobe-page-agent.apiName.modifyNodes')}</span>
         {statsParts.length > 0 && (
           <>

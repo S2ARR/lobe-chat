@@ -1,6 +1,7 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
+import dynamic from '@/libs/next/dynamic';
 import { Fragment } from 'react';
 
 import Loading from '@/components/Loading/BrandTextLoading';
@@ -11,6 +12,9 @@ import { SettingsTabs } from '@/store/global/initialState';
 const componentMap = {
   [SettingsTabs.Common]: dynamic(() => import('../common'), {
     loading: () => <Loading debugId="Settings > Common" />,
+  }),
+  [SettingsTabs.ChatAppearance]: dynamic(() => import('../chat-appearance'), {
+    loading: () => <Loading debugId="Settings > ChatAppearance" />,
   }),
   [SettingsTabs.Provider]: dynamic(() => import('../provider'), {
     loading: () => <Loading debugId="Settings > Provider" />,
@@ -52,9 +56,43 @@ const componentMap = {
   [SettingsTabs.Security]: dynamic(() => import('../security'), {
     loading: () => <Loading debugId="Settings > Security" />,
   }),
-  [SettingsTabs.Usage]: dynamic(() => import('../usage'), {
-    loading: () => <Loading debugId="Settings > Usage" />,
+  [SettingsTabs.Skill]: dynamic(() => import('../skill'), {
+    loading: () => <Loading debugId="Settings > Skill" />,
   }),
+  ...(ENABLE_BUSINESS_FEATURES
+    ? ({
+        [SettingsTabs.Plans]: dynamic(
+          () => import('@/business/client/BusinessSettingPages/Plans'),
+          {
+            loading: () => <Loading debugId="Settings > Plans" />,
+          },
+        ),
+        [SettingsTabs.Funds]: dynamic(
+          () => import('@/business/client/BusinessSettingPages/Funds'),
+          {
+            loading: () => <Loading debugId="Settings > Funds" />,
+          },
+        ),
+        [SettingsTabs.Usage]: dynamic(
+          () => import('@/business/client/BusinessSettingPages/Usage'),
+          {
+            loading: () => <Loading debugId="Settings > Usage" />,
+          },
+        ),
+        [SettingsTabs.Billing]: dynamic(
+          () => import('@/business/client/BusinessSettingPages/Billing'),
+          {
+            loading: () => <Loading debugId="Settings > Billing" />,
+          },
+        ),
+        [SettingsTabs.Referral]: dynamic(
+          () => import('@/business/client/BusinessSettingPages/Referral'),
+          {
+            loading: () => <Loading debugId="Settings > Referral" />,
+          },
+        ),
+      } as const)
+    : []),
 };
 
 interface SettingsContentProps {
@@ -76,7 +114,15 @@ const SettingsContent = ({ mobile, activeTab }: SettingsContentProps) => {
         SettingsTabs.Profile,
         SettingsTabs.Stats,
         SettingsTabs.Security,
-        SettingsTabs.Usage,
+        ...(ENABLE_BUSINESS_FEATURES
+          ? [
+              SettingsTabs.Plans,
+              SettingsTabs.Funds,
+              SettingsTabs.Usage,
+              SettingsTabs.Billing,
+              SettingsTabs.Referral,
+            ]
+          : []),
       ].includes(tab as any)
     ) {
       componentProps.mobile = mobile;
@@ -99,7 +145,7 @@ const SettingsContent = ({ mobile, activeTab }: SettingsContentProps) => {
         return (
           <Fragment key={tabKey}>
             <NavHeader />
-            <SettingContainer maxWidth={1024} padding={24}>
+            <SettingContainer maxWidth={1024} paddingBlock={'24px 128px'} paddingInline={24}>
               {content}
             </SettingContainer>
           </Fragment>

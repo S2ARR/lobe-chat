@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFolderPath } from '@/app/[variants]/(main)/resource/features/hooks/useFolderPath';
 import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/features/store';
 import { useFileStore } from '@/store/file';
-import { knowledgeBaseSelectors, useKnowledgeBaseStore } from '@/store/knowledgeBase';
+import { knowledgeBaseSelectors, useKnowledgeBaseStore } from '@/store/library';
 import { FilesTabs } from '@/types/files';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
@@ -45,7 +45,7 @@ interface FolderCrumb {
   slug: string;
 }
 
-const Breadcrumb = memo<BreadcrumbProps>(({ category, knowledgeBaseId, fileName }) => {
+const Breadcrumb = memo<BreadcrumbProps>(({ category, fileName }) => {
   const { t } = useTranslation('file');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -54,7 +54,7 @@ const Breadcrumb = memo<BreadcrumbProps>(({ category, knowledgeBaseId, fileName 
   const setMode = useResourceManagerStore((s) => s.setMode);
   const setCurrentViewItemId = useResourceManagerStore((s) => s.setCurrentViewItemId);
 
-  const baseKnowledgeBaseId = knowledgeBaseId || currentKnowledgeBaseId;
+  const baseKnowledgeBaseId = currentKnowledgeBaseId;
   const knowledgeBaseName = useKnowledgeBaseStore(
     knowledgeBaseSelectors.getKnowledgeBaseNameById(baseKnowledgeBaseId || ''),
   );

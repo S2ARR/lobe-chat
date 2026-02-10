@@ -1,12 +1,12 @@
 import type { SidebarGroup } from '@lobechat/types';
-import { AccordionItem, Dropdown, Flexbox, Icon, Text } from '@lobehub/ui';
+import { AccordionItem, ContextMenuTrigger, Flexbox, Icon, Text } from '@lobehub/ui';
 import { createStaticStyles } from 'antd-style';
 import { HashIcon, Loader2 } from 'lucide-react';
 import React, { memo, useCallback, useMemo } from 'react';
 
 import { useHomeStore } from '@/store/home';
 
-import { useCreateMenuItems, useSessionGroupMenuItems } from '../../../../hooks';
+import { useCreateMenuItems } from '../../../../hooks';
 import { useAgentModal } from '../../ModalProvider';
 import SessionList from '../List';
 import Actions from './Actions';
@@ -26,14 +26,10 @@ const GroupItem = memo<SidebarGroup>(({ items, id, name }) => {
   ]);
 
   // Modal management
-  const { openMemberSelectionModal, closeMemberSelectionModal, openConfigGroupModal } =
-    useAgentModal();
-
-  // Session group menu items
-  const { createGroupWithMembers, isCreatingGroup } = useSessionGroupMenuItems();
+  const { openConfigGroupModal } = useAgentModal();
 
   // Create menu items
-  const { isValidatingAgent } = useCreateMenuItems();
+  const { isLoading } = useCreateMenuItems();
 
   const toggleEditing = useCallback(
     (visible?: boolean) => {
@@ -42,35 +38,16 @@ const GroupItem = memo<SidebarGroup>(({ items, id, name }) => {
     [id],
   );
 
-  // Handler to open member selection modal with callbacks
-  const handleOpenMemberSelection = useCallback(() => {
-    openMemberSelectionModal({
-      onCancel: closeMemberSelectionModal,
-      onConfirm: async (selectedAgents, hostConfig, enableSupervisor) => {
-        await createGroupWithMembers(
-          selectedAgents,
-          'New Group Chat',
-          hostConfig,
-          enableSupervisor,
-        );
-        closeMemberSelectionModal();
-      },
-    });
-  }, [openMemberSelectionModal, closeMemberSelectionModal, createGroupWithMembers]);
-
   const handleOpenConfigGroupModal = useCallback(() => {
     openConfigGroupModal();
   }, [openConfigGroupModal]);
 
   const dropdownMenu = useGroupDropdownMenu({
-    handleOpenMemberSelection,
     id,
     isCustomGroup: true,
     openConfigGroupModal: handleOpenConfigGroupModal,
     toggleEditing,
   });
-
-  const isLoading = isValidatingAgent || isCreatingGroup;
 
   const groupIcon = useMemo(() => {
     if (isUpdating) {
@@ -84,14 +61,7 @@ const GroupItem = memo<SidebarGroup>(({ items, id, name }) => {
       action={<Actions dropdownMenu={dropdownMenu} isLoading={isLoading} />}
       disabled={editing || isUpdating}
       headerWrapper={(header) => (
-        <Dropdown
-          menu={{
-            items: dropdownMenu,
-          }}
-          trigger={['contextMenu']}
-        >
-          {header}
-        </Dropdown>
+        <ContextMenuTrigger items={dropdownMenu}>{header}</ContextMenuTrigger>
       )}
       itemKey={id}
       key={id}

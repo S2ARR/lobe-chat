@@ -7,9 +7,9 @@ import { agentService } from '@/services/agent';
 import { chatGroupService } from '@/services/chatGroup';
 import { homeService } from '@/services/home';
 import { sessionService } from '@/services/session';
+import { getAgentStoreState } from '@/store/agent';
 import type { HomeStore } from '@/store/home/store';
-import { getSessionStoreState } from '@/store/session';
-import { type SessionGroupItem } from '@/types/session';
+import type { SessionGroupItemBase } from '@/types/session';
 import { setNamespace } from '@/utils/storeDebug';
 
 const n = setNamespace('sidebarUI');
@@ -17,9 +17,13 @@ const n = setNamespace('sidebarUI');
 export interface SidebarUIAction {
   // ========== Agent Operations ==========
   /**
-   * Duplicate an agent
+   * Duplicate an agent using agentService
    */
   duplicateAgent: (agentId: string, newTitle?: string) => Promise<void>;
+  /**
+   * Duplicate a chat group (multi-agent group)
+   */
+  duplicateAgentGroup: (groupId: string, newTitle?: string) => Promise<void>;
   /**
    * Pin or unpin an agent
    */
@@ -32,6 +36,14 @@ export interface SidebarUIAction {
    * Remove an agent
    */
   removeAgent: (agentId: string) => Promise<void>;
+  /**
+   * Remove an agent group (group chat)
+   */
+  removeAgentGroup: (groupId: string) => Promise<void>;
+  /**
+   * Rename an agent group (group chat)
+   */
+  renameAgentGroup: (groupId: string, title: string) => Promise<void>;
   /**
    * Update agent's group
    */
@@ -53,7 +65,7 @@ export interface SidebarUIAction {
   /**
    * Update group sort order
    */
-  updateGroupSort: (items: SessionGroupItem[]) => Promise<void>;
+  updateGroupSort: (items: SessionGroupItemBase[]) => Promise<void>;
 
   // ========== UI State Actions ==========
   /**
@@ -90,11 +102,9 @@ export const createSidebarUISlice: StateCreator<
       key: messageLoadingKey,
     });
 
-    // Use provided title or generate default
-    const title = newTitle ?? t('duplicateSession.title', { ns: 'chat', title: 'Agent' }) ?? 'Copy';
-    const newId = await sessionService.cloneSession(agentId, title);
+    const result = await agentService.duplicateAgent(agentId, newTitle);
 
-    if (!newId) {
+    if (!result) {
       message.destroy(messageLoadingKey);
       message.error(t('copyFail', { ns: 'common' }));
       return;
@@ -104,9 +114,35 @@ export const createSidebarUISlice: StateCreator<
     message.destroy(messageLoadingKey);
     message.success(t('duplicateSession.success', { ns: 'chat' }));
 
-    // Switch to new session
-    const sessionStore = getSessionStoreState();
-    sessionStore.switchSession(newId);
+    // Switch to the new agent
+    const agentStore = getAgentStoreState();
+    agentStore.setActiveAgentId(result.agentId);
+  },
+
+  duplicateAgentGroup: async (groupId, newTitle?: string) => {
+    const messageLoadingKey = 'duplicateAgentGroup.loading';
+
+    message.loading({
+      content: t('duplicateSession.loading', { ns: 'chat' }),
+      duration: 0,
+      key: messageLoadingKey,
+    });
+
+    const result = await chatGroupService.duplicateGroup(groupId, newTitle);
+
+    if (!result) {
+      message.destroy(messageLoadingKey);
+      message.error(t('copyFail', { ns: 'common' }));
+      return;
+    }
+
+    await get().refreshAgentList();
+    message.destroy(messageLoadingKey);
+    message.success(t('duplicateSession.success', { ns: 'chat' }));
+
+    // Switch to the new group (using supervisor agent id)
+    const agentStore = getAgentStoreState();
+    agentStore.setActiveAgentId(result.supervisorAgentId);
   },
 
   pinAgent: async (agentId, pinned) => {
@@ -121,6 +157,17 @@ export const createSidebarUISlice: StateCreator<
 
   removeAgent: async (agentId) => {
     await agentService.removeAgent(agentId);
+    await get().refreshAgentList();
+  },
+
+  removeAgentGroup: async (groupId) => {
+    // Delete the group
+    await chatGroupService.deleteGroup(groupId);
+    await get().refreshAgentList();
+  },
+
+  renameAgentGroup: async (groupId, title) => {
+    await chatGroupService.updateGroup(groupId, { title });
     await get().refreshAgentList();
   },
 

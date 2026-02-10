@@ -6,20 +6,15 @@ import { BotIcon, FileTextIcon, FolderCogIcon, FolderPlus } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import useSWRMutation from 'swr/mutation';
 
 import { useGroupTemplates } from '@/components/ChatGroupWizard/templates';
 import { DEFAULT_CHAT_GROUP_CHAT_CONFIG } from '@/const/settings';
-import { useActionSWR } from '@/libs/swr';
 import { type GroupMemberConfig, chatGroupService } from '@/services/chatGroup';
 import { useAgentStore } from '@/store/agent';
 import { useAgentGroupStore } from '@/store/agentGroup';
-import { useFileStore } from '@/store/file';
 import { useHomeStore } from '@/store/home';
-
-interface HostConfig {
-  model?: string;
-  provider?: string;
-}
+import { usePageStore } from '@/store/page';
 
 interface CreateAgentOptions {
   groupId?: string;
@@ -45,22 +40,45 @@ export const useCreateMenuItems = () => {
     s.switchToGroup,
   ]);
   const [createGroup, loadGroups] = useAgentGroupStore((s) => [s.createGroup, s.loadGroups]);
-  const createNewPage = useFileStore((s) => s.createNewPage);
+  const createNewPage = usePageStore((s) => s.createNewPage);
 
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isCreatingSessionGroup, setIsCreatingSessionGroup] = useState(false);
 
   // SWR-based agent creation with auto navigation to profile
-  const { mutate: mutateAgent, isValidating: isValidatingAgent } = useActionSWR(
+  const { trigger: mutateAgent, isMutating: isMutatingAgent } = useSWRMutation(
     'agent.createAgent',
     async () => {
       const result = await storeCreateAgent({});
-      navigate(`/agent/${result.agentId}/profile`);
       return result;
     },
     {
-      onSuccess: async () => {
+      onSuccess: async (result) => {
+        navigate(`/agent/${result.agentId}/profile`);
         await refreshAgentList();
+      },
+    },
+  );
+
+  // SWR-based group creation with auto navigation to profile
+  const { trigger: mutateGroup, isMutating: isMutatingGroup } = useSWRMutation(
+    'group.createGroup',
+    async () => {
+      const groupId = await createGroup(
+        {
+          config: DEFAULT_CHAT_GROUP_CHAT_CONFIG,
+          title: t('defaultGroupChat'),
+        },
+        [],
+        true, // silent mode - don't switch session, we'll navigate instead
+      );
+      return groupId;
+    },
+    {
+      onSuccess: async (groupId) => {
+        navigate(`/group/${groupId}/profile`);
+        await refreshAgentList();
+        await loadGroups();
       },
     },
   );
@@ -81,12 +99,7 @@ export const useCreateMenuItems = () => {
    * Uses backend batch creation for better performance and consistency
    */
   const createGroupFromTemplate = useCallback(
-    async (
-      templateId: string,
-      hostConfig?: HostConfig,
-      enableSupervisor?: boolean,
-      selectedMemberTitles?: string[],
-    ) => {
+    async (templateId: string, selectedMemberTitles?: string[]) => {
       setIsCreatingGroup(true);
       try {
         const template = groupTemplates.find((t) => t.id === templateId);
@@ -111,16 +124,6 @@ export const useCreateMenuItems = () => {
         // Use batch creation endpoint - creates all agents and group in one request
         const { groupId } = await chatGroupService.createGroupWithMembers(
           {
-            config: {
-              ...(hostConfig
-                ? {
-                    orchestratorModel: hostConfig.model,
-                    orchestratorProvider: hostConfig.provider,
-                  }
-                : {}),
-              enableSupervisor: enableSupervisor ?? true,
-              scene: DEFAULT_CHAT_GROUP_CHAT_CONFIG.scene,
-            },
             title: template.title,
           },
           memberConfigs,
@@ -149,28 +152,14 @@ export const useCreateMenuItems = () => {
    * Create group with members
    */
   const createGroupWithMembers = useCallback(
-    async (
-      selectedAgents: string[],
-      groupTitle?: string,
-      hostConfig?: HostConfig,
-      enableSupervisor?: boolean,
-    ) => {
+    async (selectedAgents: string[], groupTitle?: string) => {
       setIsCreatingGroup(true);
       try {
         const title = groupTitle || t('defaultGroupChat');
 
         await createGroup(
           {
-            config: {
-              ...DEFAULT_CHAT_GROUP_CHAT_CONFIG,
-              ...(hostConfig
-                ? {
-                    orchestratorModel: hostConfig.model,
-                    orchestratorProvider: hostConfig.provider,
-                  }
-                : {}),
-              enableSupervisor: enableSupervisor ?? true,
-            },
+            config: DEFAULT_CHAT_GROUP_CHAT_CONFIG,
             title,
           },
           selectedAgents,
@@ -205,20 +194,27 @@ export const useCreateMenuItems = () => {
   );
 
   /**
+   * Create empty group and navigate to profile
+   */
+  const createEmptyGroup = useCallback(async () => {
+    await mutateGroup();
+  }, [mutateGroup]);
+
+  /**
    * Create group chat menu item
-   * Opens the group wizard modal
+   * Creates an empty group and navigates to its profile page
    */
   const createGroupChatMenuItem = useCallback(
-    (onOpenWizard: () => void): ItemType => ({
+    (): ItemType => ({
       icon: <Icon icon={GroupBotSquareIcon} />,
       key: 'newGroupChat',
       label: t('newGroupChat'),
-      onClick: (info) => {
+      onClick: async (info) => {
         info.domEvent?.stopPropagation();
-        onOpenWizard();
+        await createEmptyGroup();
       },
     }),
-    [t],
+    [t, createEmptyGroup],
   );
 
   /**
@@ -299,7 +295,7 @@ export const useCreateMenuItems = () => {
     // Loading states
     isCreatingGroup,
     isCreatingSessionGroup,
-    isLoading: isValidatingAgent || isCreatingGroup || isCreatingSessionGroup,
-    isValidatingAgent,
+    isLoading: isMutatingAgent || isMutatingGroup || isCreatingGroup || isCreatingSessionGroup,
+    isMutatingAgent,
   };
 };

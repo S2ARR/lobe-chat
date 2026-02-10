@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { UIChatMessage } from './message';
+import { PageSelection, PageSelectionSchema } from './message/ui/params';
 import { OpenAIChatMessage } from './openai/chat';
 import { LobeUniformTool, LobeUniformToolSchema } from './tool';
 import { ChatTopic } from './topic';
@@ -10,6 +11,8 @@ export interface SendNewMessage {
   content: string;
   // if message has attached with files, then add files to message and the agent
   files?: string[];
+  /** Page selections attached to this message (for Ask AI functionality) */
+  pageSelections?: PageSelection[];
   parentId?: string;
 }
 
@@ -35,6 +38,10 @@ export interface SendMessageServerParams {
    */
   groupId?: string;
   newAssistantMessage: {
+    /**
+     * Message metadata (e.g., isSupervisor for group orchestration)
+     */
+    metadata?: Record<string, unknown>;
     model: string;
     provider: string;
   };
@@ -65,6 +72,7 @@ export const AiSendMessageServerSchema = z.object({
   agentId: z.string().optional(),
   groupId: z.string().optional(),
   newAssistantMessage: z.object({
+    metadata: z.record(z.unknown()).optional(),
     model: z.string().optional(),
     provider: z.string().optional(),
   }),
@@ -78,6 +86,7 @@ export const AiSendMessageServerSchema = z.object({
   newUserMessage: z.object({
     content: z.string(),
     files: z.array(z.string()).optional(),
+    pageSelections: z.array(PageSelectionSchema).optional(),
     parentId: z.string().optional(),
   }),
   sessionId: z.string().optional(),
@@ -115,7 +124,6 @@ export const StructureSchema = z.object({
 });
 
 export const StructureOutputSchema = z.object({
-  keyVaultsPayload: z.string(),
   messages: z.array(z.any()),
   model: z.string(),
   provider: z.string(),

@@ -9,8 +9,8 @@ export async function getSubscriptionPlan(userId: string): Promise<Plans> {
   return Plans.Free;
 }
 
-export async function getIsInWaitList(userId: string): Promise<boolean> {
-  return true;
+export async function getIsInviteCodeRequired(userId: string): Promise<boolean> {
+  return false;
 }
 
 export async function initNewUserForBusiness(

@@ -1,3 +1,4 @@
+import { CLASSNAMES } from '@lobehub/ui';
 import { type Theme, css } from 'antd-style';
 
 // fix ios input keyboard
@@ -14,8 +15,6 @@ export default ({ token }: { prefixCls: string; token: Theme }) => css`
     height: 100%;
     min-height: 100dvh;
     max-height: 100dvh;
-
-    background: ${token.colorBgLayout};
 
     @media (min-device-width: 576px) {
       overflow: hidden;
@@ -54,5 +53,10 @@ export default ({ token }: { prefixCls: string; token: Theme }) => css`
 
   button {
     -webkit-app-region: no-drag;
+  }
+
+  .${CLASSNAMES.ContextTrigger}[data-popup-open]:not([data-no-highlight]),
+  .${CLASSNAMES.DropdownMenuTrigger}[data-popup-open]:not([data-no-highlight]) {
+    background: ${token.colorFillTertiary};
   }
 `;

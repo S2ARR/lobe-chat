@@ -7,7 +7,8 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const WelcomeText = memo(() => {
-  const { t } = useTranslation('welcome');
+  const { t, i18n } = useTranslation('welcome');
+  const locale = i18n.language;
 
   const sentences = useMemo(() => {
     const messages = t('welcomeMessages', { returnObjects: true }) as Record<string, string>;
@@ -26,11 +27,12 @@ const WelcomeText = memo(() => {
         cursorCharacter={<LoadingDots color={cssVar.colorText} size={20} variant={'pulse'} />}
         cursorFade={false}
         deletePauseDuration={1000}
-        deletingSpeed={44}
+        deletingSpeed={32}
         hideCursorWhileTyping={'afterTyping'}
+        key={locale}
         pauseDuration={16_000}
         sentences={sentences}
-        typingSpeed={88}
+        typingSpeed={64}
       />
     </Center>
   );

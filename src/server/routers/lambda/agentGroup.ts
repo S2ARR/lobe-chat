@@ -1,3 +1,4 @@
+import { InsertChatGroupSchema } from '@lobechat/types';
 import { z } from 'zod';
 
 import { AgentModel } from '@/database/models/agent';
@@ -5,11 +6,10 @@ import { ChatGroupModel } from '@/database/models/chatGroup';
 import { UserModel } from '@/database/models/user';
 import { AgentGroupRepository } from '@/database/repositories/agentGroup';
 import { insertAgentSchema } from '@/database/schemas';
-import { insertChatGroupSchema } from '@/database/schemas/chatGroup';
 import { type ChatGroupConfig } from '@/database/types/chatGroup';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
-import { ChatGroupService } from '@/server/services/chatGroup';
+import { AgentGroupService } from '@/server/services/agentGroup';
 
 const agentGroupProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -17,9 +17,9 @@ const agentGroupProcedure = authedProcedure.use(serverDatabase).use(async (opts)
   return opts.next({
     ctx: {
       agentGroupRepo: new AgentGroupRepository(ctx.serverDB, ctx.userId),
+      agentGroupService: new AgentGroupService(ctx.serverDB, ctx.userId),
       agentModel: new AgentModel(ctx.serverDB, ctx.userId),
       chatGroupModel: new ChatGroupModel(ctx.serverDB, ctx.userId),
-      chatGroupService: new ChatGroupService(ctx.serverDB, ctx.userId),
       userModel: new UserModel(ctx.serverDB, ctx.userId),
     },
   });
@@ -35,6 +35,45 @@ export const agentGroupRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       return ctx.chatGroupModel.addAgentsToGroup(input.groupId, input.agentIds);
+    }),
+
+  /**
+   * Batch create virtual agents and add them to an existing group.
+   * This is more efficient than calling createAgentOnly multiple times.
+   */
+  batchCreateAgentsInGroup: agentGroupProcedure
+    .input(
+      z.object({
+        agents: z.array(
+          insertAgentSchema
+            .omit({
+              chatConfig: true,
+              openingMessage: true,
+              openingQuestions: true,
+              tts: true,
+              userId: true,
+            })
+            .partial(),
+        ),
+        groupId: z.string(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Batch create virtual agents
+      const agentConfigs = input.agents.map((agent) => ({
+        ...agent,
+        plugins: agent.plugins as string[] | undefined,
+        tags: agent.tags as string[] | undefined,
+        virtual: true,
+      }));
+
+      const createdAgents = await ctx.agentModel.batchCreate(agentConfigs);
+      const agentIds = createdAgents.map((agent) => agent.id);
+
+      // Add all agents to the group
+      await ctx.chatGroupModel.addAgentsToGroup(input.groupId, agentIds);
+
+      return { agentIds, agents: createdAgents };
     }),
 
   /**
@@ -57,16 +96,14 @@ export const agentGroupRouter = router({
    * The supervisor agent is automatically created as a virtual agent.
    * Returns the groupId and supervisorAgentId.
    */
-  createGroup: agentGroupProcedure
-    .input(insertChatGroupSchema.omit({ userId: true }))
-    .mutation(async ({ input, ctx }) => {
-      const { group, supervisorAgentId } = await ctx.agentGroupRepo.createGroupWithSupervisor({
-        ...input,
-        config: ctx.chatGroupService.normalizeGroupConfig(input.config as ChatGroupConfig | null),
-      });
+  createGroup: agentGroupProcedure.input(InsertChatGroupSchema).mutation(async ({ input, ctx }) => {
+    const { group, supervisorAgentId } = await ctx.agentGroupRepo.createGroupWithSupervisor({
+      ...input,
+      config: ctx.agentGroupService.normalizeGroupConfig(input.config as ChatGroupConfig | null),
+    });
 
-      return { group, supervisorAgentId };
-    }),
+    return { group, supervisorAgentId };
+  }),
 
   /**
    * Create a group with virtual member agents in one request.
@@ -80,7 +117,7 @@ export const agentGroupRouter = router({
   createGroupWithMembers: agentGroupProcedure
     .input(
       z.object({
-        groupConfig: insertChatGroupSchema.omit({ userId: true }),
+        groupConfig: InsertChatGroupSchema,
         members: z.array(
           insertAgentSchema
             .omit({
@@ -92,6 +129,21 @@ export const agentGroupRouter = router({
             })
             .partial(),
         ),
+        supervisorConfig: z
+          .object({
+            avatar: z.string().nullish(),
+            backgroundColor: z.string().nullish(),
+            chatConfig: z.any().nullish(),
+            description: z.string().nullish(),
+            model: z.string().nullish(),
+            params: z.any().nullish(),
+            plugins: z.array(z.string()).nullish(),
+            provider: z.string().nullish(),
+            systemRole: z.string().nullish(),
+            tags: z.array(z.string()).nullish(),
+            title: z.string().nullish(),
+          })
+          .optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -107,14 +159,25 @@ export const agentGroupRouter = router({
       const memberAgentIds = createdAgents.map((agent) => agent.id);
 
       // 2. Create group with supervisor and member agents
+      // Filter out null/undefined values from supervisorConfig
+      const supervisorConfig = input.supervisorConfig
+        ? Object.fromEntries(
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars, eqeqeq
+            Object.entries(input.supervisorConfig).filter(([_, v]) => v != null),
+          )
+        : undefined;
+
+      const normalizedConfig = ctx.agentGroupService.normalizeGroupConfig(
+        input.groupConfig.config as ChatGroupConfig | null,
+      );
+
       const { group, supervisorAgentId } = await ctx.agentGroupRepo.createGroupWithSupervisor(
         {
           ...input.groupConfig,
-          config: ctx.chatGroupService.normalizeGroupConfig(
-            input.groupConfig.config as ChatGroupConfig | null,
-          ),
+          config: normalizedConfig,
         },
         memberAgentIds,
+        supervisorConfig as any,
       );
 
       return { agentIds: memberAgentIds, groupId: group.id, supervisorAgentId };
@@ -123,7 +186,23 @@ export const agentGroupRouter = router({
   deleteGroup: agentGroupProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      return ctx.chatGroupModel.delete(input.id);
+      return ctx.agentGroupService.deleteGroup(input.id);
+    }),
+
+  /**
+   * Duplicate a chat group with all its members.
+   * Creates a new group with the same config, a new supervisor, and copies of virtual members.
+   * Non-virtual members are referenced (not copied).
+   */
+  duplicateGroup: agentGroupProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        newTitle: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      return ctx.agentGroupRepo.duplicate(input.groupId, input.newTitle);
     }),
 
   getGroup: agentGroupProcedure
@@ -138,31 +217,45 @@ export const agentGroupRouter = router({
       return ctx.chatGroupModel.getGroupAgents(input.groupId);
     }),
 
+  /**
+   * Get a group by forkedFromIdentifier stored in config
+   * @returns group id if exists, null otherwise
+   */
+  getGroupByForkedFromIdentifier: agentGroupProcedure
+    .input(
+      z.object({
+        forkedFromIdentifier: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      return ctx.chatGroupModel.getGroupByForkedFromIdentifier(input.forkedFromIdentifier);
+    }),
+
   getGroupDetail: agentGroupProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
       const [defaultAgentConfig, detail] = await Promise.all([
         ctx.userModel.getUserSettingsDefaultAgentConfig(),
-        ctx.chatGroupService.getGroupDetail(input.id),
+        ctx.agentGroupService.getGroupDetail(input.id),
       ]);
 
       if (!detail) return null;
 
       return {
         ...detail,
-        agents: ctx.chatGroupService.mergeAgentsDefaultConfig(defaultAgentConfig, detail.agents),
+        agents: ctx.agentGroupService.mergeAgentsDefaultConfig(defaultAgentConfig, detail.agents),
       };
     }),
 
   getGroups: agentGroupProcedure.query(async ({ ctx }) => {
     const [defaultAgentConfig, groups] = await Promise.all([
       ctx.userModel.getUserSettingsDefaultAgentConfig(),
-      ctx.chatGroupService.getGroups(),
+      ctx.agentGroupService.getGroups(),
     ]);
 
     return groups.map((group) => ({
       ...group,
-      agents: ctx.chatGroupService.mergeAgentsDefaultConfig(defaultAgentConfig, group.agents),
+      agents: ctx.agentGroupService.mergeAgentsDefaultConfig(defaultAgentConfig, group.agents),
     }));
   }),
 
@@ -211,13 +304,13 @@ export const agentGroupRouter = router({
     .input(
       z.object({
         id: z.string(),
-        value: insertChatGroupSchema.partial(),
+        value: InsertChatGroupSchema.partial(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       return ctx.chatGroupModel.update(input.id, {
         ...input.value,
-        config: ctx.chatGroupService.normalizeGroupConfig(
+        config: ctx.agentGroupService.normalizeGroupConfig(
           input.value.config as ChatGroupConfig | null,
         ),
       });

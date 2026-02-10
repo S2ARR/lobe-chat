@@ -201,7 +201,7 @@ export const messagePublicApi: StateCreator<
 
     get().internal_dispatchMessage({ type: 'deleteMessages', ids });
     const ctx = get().internal_getConversationContext();
-    // CRUD operations pass agentId - backend handles sessionId mapping (LOBE-1086)
+    // CRUD operations pass agentId - backend handles sessionId mapping
     const result = await messageService.removeMessages(ids, ctx);
 
     if (result?.success && result.messages) {
@@ -235,16 +235,16 @@ export const messagePublicApi: StateCreator<
   },
 
   clearMessage: async () => {
-    const { activeId, activeTopicId, activeGroupId, refreshTopic, switchTopic } = get();
+    const { activeAgentId, activeTopicId, activeGroupId, refreshTopic, switchTopic } = get();
 
     // For group sessions, we need to clear group messages using groupId
-    // For regular sessions, we clear session messages using sessionId
+    // For regular sessions, we clear session messages using agentId
     if (activeGroupId) {
       // For group chat, activeGroupId is the groupId
       await messageService.removeMessagesByGroup(activeGroupId, activeTopicId);
     } else {
-      // For regular session, activeId is the sessionId
-      await messageService.removeMessagesByAssistant(activeId, activeTopicId);
+      // For regular session, activeAgentId is the agentId
+      await messageService.removeMessagesByAssistant(activeAgentId, activeTopicId);
     }
 
     if (activeTopicId) {
@@ -256,7 +256,7 @@ export const messagePublicApi: StateCreator<
     get().replaceMessages([]);
 
     // after remove topic , go back to default topic
-    switchTopic();
+    switchTopic(null);
   },
 
   clearAllMessages: async () => {

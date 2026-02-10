@@ -50,7 +50,8 @@ export default class RemoteServerConfigCtr extends ControllerModule {
    * Local mode has been removed; fall back to cloud.
    */
   private normalizeConfig = (config: DataSyncConfig): DataSyncConfig => {
-    if (config.storageMode !== 'local') return config;
+    // Use type assertion to handle legacy 'local' value from stored data
+    if ((config.storageMode as string) !== 'local') return config;
 
     const nextConfig: DataSyncConfig = {
       ...config,
@@ -96,6 +97,8 @@ export default class RemoteServerConfigCtr extends ControllerModule {
     const merged = this.normalizeConfig({ ...prev, ...config });
     storeManager.set('dataSyncConfig', merged);
 
+    this.broadcastRemoteServerConfigUpdated();
+
     return true;
   }
 
@@ -113,7 +116,14 @@ export default class RemoteServerConfigCtr extends ControllerModule {
     // Clear tokens (if any)
     await this.clearTokens();
 
+    this.broadcastRemoteServerConfigUpdated();
+
     return true;
+  }
+
+  private broadcastRemoteServerConfigUpdated() {
+    logger.debug('Broadcasting remoteServerConfigUpdated event to all windows');
+    this.app.browserManager.broadcastToAllWindows('remoteServerConfigUpdated', undefined);
   }
 
   /**

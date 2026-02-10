@@ -1,12 +1,13 @@
 'use client';
 
-import { ActionIcon, Dropdown } from '@lobehub/ui';
-import { Clock, Loader2Icon, MoreHorizontal } from 'lucide-react';
+import { ActionIcon, DropdownMenu } from '@lobehub/ui';
+import { Clock, MoreHorizontal } from 'lucide-react';
 import { Suspense, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/features/store';
+import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { useInitRecentResource } from '@/hooks/useInitRecentResource';
 import { useHomeStore } from '@/store/home';
 import { homeRecentSelectors } from '@/store/home/selectors';
@@ -35,23 +36,21 @@ const RecentResource = memo(() => {
     <GroupBlock
       action={
         <>
-          {isRevalidating && <ActionIcon icon={Loader2Icon} loading size={'small'} />}
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'all-files',
-                  label: t('menu.allFiles'),
-                  onClick: () => {
-                    setCategory(FilesTabs.All);
-                    navigate('/resource');
-                  },
+          {isRevalidating && <NeuralNetworkLoading size={14} />}
+          <DropdownMenu
+            items={[
+              {
+                key: 'all-files',
+                label: t('menu.allFiles'),
+                onClick: () => {
+                  setCategory(FilesTabs.All);
+                  navigate('/resource');
                 },
-              ],
-            }}
+              },
+            ]}
           >
             <ActionIcon icon={MoreHorizontal} size="small" />
-          </Dropdown>
+          </DropdownMenu>
         </>
       }
       icon={Clock}

@@ -89,14 +89,13 @@ const DesktopChatInput = memo<DesktopChatInputProps>(
         paddingBlock={expand ? 0 : showFootnote ? '0 12px' : '0 16px'}
       >
         <ChatInput
+          data-testid="chat-input"
           defaultHeight={chatInputHeight || 32}
           footer={
             <ChatInputActionBar
               left={<ActionBar dropdownPlacement={dropdownPlacement} />}
               right={<SendArea />}
-              style={{
-                paddingRight: 8,
-              }}
+              style={{ paddingRight: 8 }}
             />
           }
           fullscreen={expand}

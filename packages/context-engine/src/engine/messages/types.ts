@@ -4,10 +4,13 @@ import type { RuntimeInitialContext, RuntimeStepContext } from '@lobechat/types'
 
 import type { OpenAIChatMessage, UIChatMessage } from '@/types/index';
 
-import type { AgentInfo } from '../../processors/GroupMessageSender';
+import type { AgentInfo } from '../../processors/GroupRoleTransform';
 import type { AgentBuilderContext } from '../../providers/AgentBuilderContextInjector';
+import type { GTDPlan } from '../../providers/GTDPlanInjector';
+import type { GTDTodoList } from '../../providers/GTDTodoInjector';
 import type { GroupAgentBuilderContext } from '../../providers/GroupAgentBuilderContextInjector';
 import type { GroupMemberInfo } from '../../providers/GroupContextInjector';
+import type { LobeToolManifest } from '../tools/types';
 
 /**
  * Model capability checker
@@ -36,9 +39,9 @@ export interface KnowledgeConfig {
  * Tools configuration
  */
 export interface ToolsConfig {
-  /** Function to get tool system roles */
-  getToolSystemRoles?: (tools: string[]) => string | undefined;
-  /** Enabled tool IDs */
+  /** Tool manifests with systemRole and API definitions */
+  manifests?: LobeToolManifest[];
+  /** Enabled tool IDs (kept for compatibility) */
   tools?: string[];
 }
 
@@ -83,11 +86,21 @@ export interface UserMemoryPreferenceItem {
   [key: string]: unknown;
 }
 
+export interface UserMemoryActivityItem {
+  endsAt?: string | Date | null;
+  id?: string;
+  startsAt?: string | Date | null;
+  status?: string | null;
+  timezone?: string | null;
+  type?: string | null;
+  [key: string]: unknown;
+}
+
 export interface UserMemoryIdentityItem {
   description?: string | null;
   id?: string;
   role?: string | null;
-  /** Identity type: personal (角色), professional (职业), demographic (属性) */
+  /** Identity type: personal (role), professional (occupation), demographic (attribute) */
   type?: 'demographic' | 'personal' | 'professional' | string | null;
   [key: string]: unknown;
 }
@@ -97,6 +110,7 @@ export interface UserMemoryIdentityItem {
  * Compatible with SearchMemoryResult from @lobechat/types
  */
 export interface UserMemoryData {
+  activities?: UserMemoryActivityItem[];
   contexts: UserMemoryContextItem[];
   experiences: UserMemoryExperienceItem[];
   identities?: UserMemoryIdentityItem[];
@@ -136,6 +150,19 @@ export interface AgentGroupConfig {
   members?: GroupMemberInfo[];
   /** Custom system prompt/role description for the group */
   systemPrompt?: string;
+}
+
+/**
+ * GTD (Getting Things Done) configuration
+ * Used to inject plan and todo context for task management
+ */
+export interface GTDConfig {
+  /** Whether GTD context injection is enabled */
+  enabled?: boolean;
+  /** The current plan to inject (injected before first user message) */
+  plan?: GTDPlan;
+  /** The current todo list to inject (injected at end of last user message) */
+  todos?: GTDTodoList;
 }
 
 /**
@@ -189,6 +216,8 @@ export interface MessagesEngineParams {
   agentGroup?: AgentGroupConfig;
   /** Group Agent Builder context */
   groupAgentBuilderContext?: GroupAgentBuilderContext;
+  /** GTD (Getting Things Done) configuration */
+  gtd?: GTDConfig;
   /** User memory configuration */
   userMemory?: UserMemoryConfig;
 
@@ -231,8 +260,10 @@ export interface MessagesEngineResult {
 
 // Re-export types for convenience
 
-export { type AgentInfo } from '../../processors/GroupMessageSender';
+export { type AgentInfo } from '../../processors/GroupRoleTransform';
 export { type AgentBuilderContext } from '../../providers/AgentBuilderContextInjector';
 export { type GroupAgentBuilderContext } from '../../providers/GroupAgentBuilderContextInjector';
+export { type GTDPlan } from '../../providers/GTDPlanInjector';
+export { type GTDTodoItem, type GTDTodoList } from '../../providers/GTDTodoInjector';
 export { type OpenAIChatMessage, type UIChatMessage } from '@/types/index';
 export { type FileContent, type KnowledgeBaseInfo } from '@lobechat/prompts';

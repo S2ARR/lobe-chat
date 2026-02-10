@@ -1,10 +1,9 @@
 /**
  * Tests for Lobe Web Browsing Executor
  */
+import { WebBrowsingApiName } from '@lobechat/builtin-tool-web-browsing';
 import { SEARCH_SEARXNG_NOT_CONFIG } from '@lobechat/types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { WebBrowsingApiName } from '@/tools/web-browsing';
 
 import type { BuiltinToolContext } from '../../types';
 import { webBrowsing } from '../lobe-web-browsing';
@@ -161,6 +160,7 @@ describe('WebBrowsingExecutor', () => {
           { data: { title: 'Page 1', content: 'Content 1', url: 'https://example1.com' } },
           { data: { title: 'Page 2', content: 'Content 2', url: 'https://example2.com' } },
         ],
+        savedDocuments: [],
       };
       mockCrawlPages.mockResolvedValue(mockResponse);
 

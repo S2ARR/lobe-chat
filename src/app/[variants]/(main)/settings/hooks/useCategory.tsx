@@ -1,34 +1,43 @@
+import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
 import { isDesktop } from '@lobechat/const';
 import { Avatar } from '@lobehub/ui';
 import {
-  BadgeCentIcon,
+  Blocks,
   Brain,
   BrainCircuit,
   ChartColumnBigIcon,
+  Coins,
+  CreditCard,
   Database,
   EthernetPort,
+  Gift,
   Image as ImageIcon,
   Info,
   KeyIcon,
   KeyboardIcon,
+  Map,
+  MessageSquareTextIcon,
   Mic2,
   PaletteIcon,
-  ShieldCheck,
+  PieChart,
   Sparkles,
   UserCircle,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useElectronStore } from '@/store/electron';
+import { electronSyncSelectors } from '@/store/electron/selectors';
 import { SettingsTabs } from '@/store/global/initialState';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 import { useUserStore } from '@/store/user';
-import { authSelectors, userProfileSelectors } from '@/store/user/slices/auth/selectors';
+import { userProfileSelectors } from '@/store/user/slices/auth/selectors';
 
 export enum SettingsGroupKey {
   AIConfig = 'ai-config',
   Account = 'account',
   Profile = 'profile',
+  Subscription = 'subscription',
   System = 'system',
 }
 
@@ -47,28 +56,34 @@ export interface CategoryGroup {
 export const useCategory = () => {
   const { t } = useTranslation('setting');
   const { t: tAuth } = useTranslation('auth');
+  const { t: tSubscription } = useTranslation('subscription');
   const mobile = useServerConfigStore((s) => s.isMobile);
   const { enableSTT, hideDocs, showAiImage, showApiKeyManage } =
     useServerConfigStore(featureFlagsSelectors);
-  const [isLoginWithClerk, avatar, username] = useUserStore((s) => [
-    authSelectors.isLoginWithClerk(s),
+  const [avatar, username] = useUserStore((s) => [
     userProfileSelectors.userAvatar(s),
     userProfileSelectors.nickName(s),
   ]);
+  const remoteServerUrl = useElectronStore(electronSyncSelectors.remoteServerUrl);
+
+  // Process avatar URL for desktop environment
+  const avatarUrl = useMemo(() => {
+    if (!avatar) return undefined;
+    if (isDesktop && avatar.startsWith('/') && remoteServerUrl) {
+      return remoteServerUrl + avatar;
+    }
+    return avatar;
+  }, [avatar, remoteServerUrl]);
+
   const categoryGroups: CategoryGroup[] = useMemo(() => {
     const groups: CategoryGroup[] = [];
 
     // 个人资料组 - Profile 相关设置
     const profileItems: CategoryItem[] = [
       {
-        icon: avatar ? <Avatar avatar={avatar} shape={'square'} size={26} /> : UserCircle,
+        icon: avatarUrl ? <Avatar avatar={avatarUrl} shape={'square'} size={26} /> : UserCircle,
         key: SettingsTabs.Profile,
         label: username ? username : tAuth('tab.profile'),
-      },
-      isLoginWithClerk && {
-        icon: ShieldCheck,
-        key: SettingsTabs.Security,
-        label: tAuth('tab.security'),
       },
       {
         icon: ChartColumnBigIcon,
@@ -80,11 +95,6 @@ export const useCategory = () => {
         key: SettingsTabs.APIKey,
         label: tAuth('tab.apikey'),
       },
-      {
-        icon: BadgeCentIcon,
-        key: SettingsTabs.Usage,
-        label: tAuth('tab.usage'),
-      },
     ].filter(Boolean) as CategoryItem[];
 
     groups.push({
@@ -93,12 +103,53 @@ export const useCategory = () => {
       title: t('group.profile'),
     });
 
+    const subscriptionItems: CategoryItem[] = [
+      {
+        icon: Map,
+        key: SettingsTabs.Plans,
+        label: tSubscription('tab.plans'),
+      },
+      {
+        icon: Coins,
+        key: SettingsTabs.Funds,
+        label: tSubscription('tab.funds'),
+      },
+      {
+        icon: PieChart,
+        key: SettingsTabs.Usage,
+        label: tSubscription('tab.usage'),
+      },
+      {
+        icon: CreditCard,
+        key: SettingsTabs.Billing,
+        label: tSubscription('tab.billing'),
+      },
+      {
+        icon: Gift,
+        key: SettingsTabs.Referral,
+        label: tSubscription('tab.referral'),
+      },
+    ];
+
+    if (ENABLE_BUSINESS_FEATURES) {
+      groups.push({
+        items: subscriptionItems,
+        key: SettingsGroupKey.Subscription,
+        title: t('group.subscription'),
+      });
+    }
+
     // 账号组 - 个人相关设置
     const commonItems: CategoryItem[] = [
       {
         icon: PaletteIcon,
         key: SettingsTabs.Common,
         label: t('tab.common'),
+      },
+      {
+        icon: MessageSquareTextIcon,
+        key: SettingsTabs.ChatAppearance,
+        label: t('tab.chatAppearance'),
       },
       !mobile && {
         icon: KeyboardIcon,
@@ -124,6 +175,11 @@ export const useCategory = () => {
         icon: Sparkles,
         key: SettingsTabs.Agent,
         label: t('tab.agent'),
+      },
+      {
+        icon: Blocks,
+        key: SettingsTabs.Skill,
+        label: t('tab.skill'),
       },
       {
         icon: BrainCircuit,
@@ -174,18 +230,7 @@ export const useCategory = () => {
     });
 
     return groups;
-  }, [
-    t,
-    tAuth,
-    enableSTT,
-    hideDocs,
-    mobile,
-    showAiImage,
-    showApiKeyManage,
-    isLoginWithClerk,
-    avatar,
-    username,
-  ]);
+  }, [t, tAuth, enableSTT, hideDocs, mobile, showAiImage, showApiKeyManage, avatarUrl, username]);
 
   return categoryGroups;
 };

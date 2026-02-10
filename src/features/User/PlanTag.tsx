@@ -1,3 +1,4 @@
+import { Plans } from '@lobechat/types';
 import { Tag } from '@lobehub/ui';
 import { cssVar } from 'antd-style';
 import { memo } from 'react';
@@ -8,7 +9,6 @@ import urlJoin from 'url-join';
 import { OFFICIAL_URL } from '@/const/url';
 import { isDesktop } from '@/const/version';
 import PlanIcon from '@/features/PlanIcon';
-import { Plans } from '@/types/subscription';
 
 export enum PlanType {
   Preview = 'preview',
@@ -38,10 +38,7 @@ const PlanTag = memo<PlanTagProps>(({ type = PlanType.Preview }) => {
     <Link
       style={{ cursor: 'pointer' }}
       target={isDesktop ? '_blank' : undefined}
-      to={urlJoin(
-        isDesktop ? OFFICIAL_URL : '/',
-        isFree ? '/subscription/plans' : '/subscription/usage',
-      )}
+      to={urlJoin(isDesktop ? OFFICIAL_URL : '/', isFree ? '/settings/plans' : '/settings/usage')}
     >
       <PlanIcon plan={type} size={22} type={'tag'} />
     </Link>

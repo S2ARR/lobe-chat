@@ -1,5 +1,6 @@
 'use client';
 
+import { MAX_ONBOARDING_STEPS } from '@lobechat/types';
 import { Flexbox } from '@lobehub/ui';
 import { memo } from 'react';
 
@@ -10,7 +11,6 @@ import { onboardingSelectors } from '@/store/user/selectors';
 import OnboardingContainer from './_layout';
 import FullNameStep from './features/FullNameStep';
 import InterestsStep from './features/InterestsStep';
-import ModeSelectionStep from './features/ModeSelectionStep';
 import ProSettingsStep from './features/ProSettingsStep';
 import ResponseLanguageStep from './features/ResponseLanguageStep';
 import TelemetryStep from './features/TelemetryStep';
@@ -41,10 +41,7 @@ const OnboardingPage = memo(() => {
       case 4: {
         return <ResponseLanguageStep onBack={goToPreviousStep} onNext={goToNextStep} />;
       }
-      case 5: {
-        return <ModeSelectionStep onBack={goToPreviousStep} onNext={goToNextStep} />;
-      }
-      case 6: {
+      case MAX_ONBOARDING_STEPS: {
         return <ProSettingsStep onBack={goToPreviousStep} />;
       }
       default: {

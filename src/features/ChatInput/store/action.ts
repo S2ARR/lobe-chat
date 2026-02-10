@@ -7,6 +7,7 @@ export interface Action {
   getMarkdownContent: () => string;
   handleSendButton: () => void;
   handleStop: () => void;
+  setDocument: (type: string, content: any, options?: Record<string, unknown>) => void;
   setExpand: (expend: boolean) => void;
   setJSONState: (content: any) => void;
   setShowTypoBar: (show: boolean) => void;
@@ -14,8 +15,6 @@ export interface Action {
 }
 
 export type Store = Action & State;
-
-// const t = setNamespace('ChatInput');
 
 type CreateStore = (
   initState?: Partial<PublicState>,
@@ -47,6 +46,10 @@ export const store: CreateStore = (publicState) => (set, get) => ({
     if (!get().editor) return;
 
     get().sendButtonProps?.onStop?.({ editor: get().editor! });
+  },
+
+  setDocument: (type, content, options) => {
+    get().editor?.setDocument(type, content, options);
   },
 
   setExpand: (expand) => {

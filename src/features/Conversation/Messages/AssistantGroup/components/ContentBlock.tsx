@@ -1,5 +1,5 @@
-import { Flexbox } from '@lobehub/ui';
-import { memo } from 'react';
+import { Flexbox, Highlighter } from '@lobehub/ui';
+import { memo, useCallback } from 'react';
 
 import { LOADING_FLAT } from '@/const/message';
 import { useErrorContent } from '@/features/Conversation/Error';
@@ -12,26 +12,53 @@ import Reasoning from '../../components/Reasoning';
 import { Tools } from '../Tools';
 import MessageContent from './MessageContent';
 
-const ContentBlock = memo<AssistantContentBlock>(
-  ({ id, tools, content, imageList, reasoning, error }) => {
+interface ContentBlockProps extends AssistantContentBlock {
+  assistantId: string;
+  disableEditing?: boolean;
+}
+const ContentBlock = memo<ContentBlockProps>(
+  ({ id, tools, content, imageList, reasoning, error, assistantId, disableEditing }) => {
     const errorContent = useErrorContent(error);
     const showImageItems = !!imageList && imageList.length > 0;
-    const isReasoning = useConversationStore(messageStateSelectors.isMessageInReasoning(id));
+    const [isReasoning, deleteMessage, continueGeneration] = useConversationStore((s) => [
+      messageStateSelectors.isMessageInReasoning(id)(s),
+      s.deleteDBMessage,
+      s.continueGeneration,
+    ]);
     const hasTools = tools && tools.length > 0;
     const showReasoning =
       (!!reasoning && reasoning.content?.trim() !== '') || (!reasoning && isReasoning);
 
-    if (error && (content === LOADING_FLAT || !content))
+    const handleRegenerate = useCallback(async () => {
+      await deleteMessage(id);
+      continueGeneration(assistantId);
+    }, [id]);
+
+    if (error && (content === LOADING_FLAT || !content)) {
       return (
         <ErrorContent
           error={
             errorContent && error && (content === LOADING_FLAT || !content)
-              ? errorContent
+              ? {
+                  ...errorContent,
+                  extra: error?.body && (
+                    <Highlighter
+                      actionIconSize={'small'}
+                      language={'json'}
+                      padding={8}
+                      variant={'borderless'}
+                    >
+                      {JSON.stringify(error?.body, null, 2)}
+                    </Highlighter>
+                  ),
+                }
               : undefined
           }
           id={id}
+          onRegenerate={handleRegenerate}
         />
       );
+    }
 
     return (
       <Flexbox gap={8} id={id}>
@@ -44,7 +71,7 @@ const ContentBlock = memo<AssistantContentBlock>(
         {showImageItems && <ImageFileListViewer items={imageList} />}
 
         {/* Tools */}
-        {hasTools && <Tools messageId={id} tools={tools} />}
+        {hasTools && <Tools disableEditing={disableEditing} messageId={id} tools={tools} />}
       </Flexbox>
     );
   },
