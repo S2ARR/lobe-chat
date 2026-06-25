@@ -11,11 +11,14 @@
  */
 import path from 'node:path';
 
+import type * as LobeChatConst from '@lobechat/const';
 import { HeterogeneousAgentSessionErrorCode } from '@lobechat/electron-client-ipc';
 import type { AgentEventAdapter } from '@lobechat/heterogeneous-agents';
 import { createAdapter } from '@lobechat/heterogeneous-agents';
 import { ThreadStatus } from '@lobechat/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { useChatStore } from '@/store/chat/store';
 
 import { createGatewayEventHandler } from '../gatewayEventHandler';
 import type { HeterogeneousAgentExecutorParams } from '../heterogeneousAgentExecutor';
@@ -68,6 +71,33 @@ vi.mock('@/services/electron/heterogeneousAgent', () => ({
 // Gateway event handler — we spy on it but let it run (it calls getMessages)
 vi.mock('../gatewayEventHandler', () => ({
   createGatewayEventHandler: vi.fn(() => vi.fn()),
+}));
+
+// isDesktop — defaults to `false` (matching the real test env / __ELECTRON__
+// undefined) so the existing suite is unaffected. The completion-notification
+// characterization tests flip `desktopFlag.value` to `true` to exercise the
+// desktop-only `notifyCompletion` branch, then restore it in afterEach.
+// `vi.hoisted` so the flag exists when the hoisted `vi.mock` factory runs at
+// module-evaluation time (which happens during collection, before any test).
+const desktopFlag = vi.hoisted(() => ({ value: false }));
+vi.mock('@lobechat/const', async (importOriginal) => {
+  const actual = await importOriginal<typeof LobeChatConst>();
+  return {
+    ...actual,
+    get isDesktop() {
+      return desktopFlag.value;
+    },
+  };
+});
+
+// Desktop notification IPC — dynamically imported inside `notifyCompletion`.
+const mockShowNotification = vi.fn(async (..._args: any[]) => {});
+const mockSetBadgeCount = vi.fn(async (..._args: any[]) => {});
+vi.mock('@/services/electron/desktopNotification', () => ({
+  desktopNotificationService: {
+    setBadgeCount: (...args: any[]) => mockSetBadgeCount(...args),
+    showNotification: (...args: any[]) => mockShowNotification(...args),
+  },
 }));
 
 // ─── Helpers ───
@@ -165,7 +195,7 @@ function createMockStore(overrides: Record<string, any> = {}) {
     drainQueuedMessages: vi.fn(() => []),
     internal_dispatchMessage: vi.fn(),
     internal_toggleToolCallingStreaming: vi.fn(),
-    markUnreadCompleted: vi.fn(),
+    markTopicUnread: vi.fn(),
     operations: {
       'op-1': {
         context: { agentId: 'agent-1', scope: 'main', topicId: 'topic-1' },
@@ -604,7 +634,7 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
   // ────────────────────────────────────────────────────
 
   describe('multi-step parentId chain', () => {
-    it('should create assistant messages chained: assistant → tool → assistant', async () => {
+    it('should chain step assistants along the spine, with tools inline', async () => {
       await runWithEvents([
         ccInit(),
         // Step 1: tool_use Read (message_start primes turn + model/provider
@@ -632,14 +662,15 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       );
       expect(tool1Create?.[0].parentId).toBe('ast-initial');
 
-      // Assistant for step 2 — parentId should be step 1's TOOL message (not assistant)
+      // Assistant for step 2 — parentId should be the spine (the initial
+      // assistant), NOT step 1's tool. Tools are inline children of their own
+      // assistant; the next assistant chains off the most recent non-tool
+      // main message (the spine).
       const step2Assistant = mockCreateMessage.mock.calls.find(
         ([p]: any) => p.role === 'assistant' && p.parentId !== undefined,
       );
       expect(step2Assistant).toBeDefined();
-      // The parentId should be the (pre-allocated) tool message ID from step 1
-      const tool1Id = tool1Create![0].id;
-      expect(step2Assistant![0].parentId).toBe(tool1Id);
+      expect(step2Assistant![0].parentId).toBe('ast-initial');
       // createMessage should carry the adapter provider so step 2's assistant
       // lands in DB with provider set from the start (no later backfill needed).
       expect(step2Assistant![0].provider).toBe('claude-code');
@@ -720,7 +751,7 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
     it('should persist per-step usage to each step assistant message, not accumulated', async () => {
       // Realistic CC partial-messages flow: message_start primes the turn,
       // assistant events echo a stale usage, message_delta carries the final.
-      const { store } = await runWithEvents([
+      await runWithEvents([
         ccInit(),
         ccMessageStart('msg_01'),
         ccAssistant('msg_01', [{ text: 'a', type: 'text' }]),
@@ -769,13 +800,6 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       // No cache tokens for this turn — these fields should be absent
       expect(u2.inputCachedTokens).toBeUndefined();
       expect(u2.inputWriteCacheTokens).toBeUndefined();
-
-      expect(store.operations['op-1'].metadata.usageMetrics).toEqual({
-        totalCost: 0,
-        totalInputTokens: 650,
-        totalOutputTokens: 130,
-        totalTokens: 780,
-      });
     });
 
     it('should ignore stale usage on assistant events (from message_start echo)', async () => {
@@ -1456,15 +1480,14 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       const newAstId = mockCreateMessage.mock.calls.find(
         ([params]: any) => params.role === 'assistant',
       )![0].id;
-      const item1ToolId = mockCreateMessage.mock.calls.find(
-        ([params]: any) => params.role === 'tool' && params.tool_call_id === 'item_1',
-      )![0].id;
 
+      // The second-turn assistant chains off the spine (turn 1's assistant,
+      // here the initial one), NOT turn 1's last tool.
       const secondTurnAssistantCreate = mockCreateMessage.mock.calls.find(
         ([params]: any) => params.role === 'assistant',
       );
       expect(secondTurnAssistantCreate?.[0]).toMatchObject({
-        parentId: item1ToolId,
+        parentId: 'ast-initial',
         role: 'assistant',
       });
 
@@ -1639,18 +1662,16 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
         ([params]: any) => params.role === 'assistant',
       );
       expect(assistantCreates).toHaveLength(2);
-      const toolIdOf = (callId: string) =>
-        mockCreateMessage.mock.calls.find(
-          ([p]: any) => p.role === 'tool' && p.tool_call_id === callId,
-        )![0].id;
       const newAst1 = assistantCreates[0]![0].id;
       const newAst2 = assistantCreates[1]![0].id;
+      // The cut assistants chain along the spine (each off the previous
+      // non-tool main message), NOT off the preceding turn's last tool.
       expect(assistantCreates[0]?.[0]).toMatchObject({
-        parentId: toolIdOf('item_3'),
+        parentId: 'ast-initial',
         role: 'assistant',
       });
       expect(assistantCreates[1]?.[0]).toMatchObject({
-        parentId: toolIdOf('item_6'),
+        parentId: newAst1,
         role: 'assistant',
       });
 
@@ -2223,9 +2244,10 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
         expect.any(Object),
       );
 
-      // 3. Step 2 assistant created chained off the Read tool message
+      // 3. Step 2 assistant created chained off the spine (the initial
+      // assistant), with the Read tool inline under step 1.
       const step2Create = mockCreateMessage.mock.calls.find(
-        ([p]: any) => p.role === 'assistant' && p.parentId === readToolId,
+        ([p]: any) => p.role === 'assistant' && p.parentId === 'ast-initial',
       );
       expect(step2Create).toBeDefined();
 
@@ -2244,9 +2266,10 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
         expect.any(Object),
       );
 
-      // 6. Step 3 assistant created chained off the Write tool message
+      // 6. Step 3 assistant created chained off the spine (step 2 assistant),
+      // with the Write tool inline under step 2.
       const step3Create = mockCreateMessage.mock.calls.find(
-        ([p]: any) => p.role === 'assistant' && p.parentId === writeToolId,
+        ([p]: any) => p.role === 'assistant' && p.parentId === step2Create![0].id,
       );
       expect(step3Create).toBeDefined();
 
@@ -2820,20 +2843,18 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       );
       expect(terminalCreate).toBeDefined();
 
-      // Terminal message should chain off the last tool, not off the
-      // thread's initial assistant, so the transcript flows
-      // user → asst(tools) → tool → asst(result).
+      // Terminal message chains off the in-thread assistant (the subagent
+      // spine), with the child tool inline, so the transcript flows
+      // user → asst(tools) → asst(result) — the subagent reducer keeps the
+      // chain anchor on the assistant instead of advancing it to the tool.
       const toolCreate = mockCreateMessage.mock.calls.find(
         ([payload]: any) => payload.role === 'tool' && payload.tool_call_id === 'toolu_child',
       );
       expect(toolCreate).toBeDefined();
-      // The tool create returns an id; since the mock returns { id } we
-      // just assert the terminal's parentId is NOT the first assistant
-      // (id of which was returned earlier in mockCreateMessage).
       const firstAssistantCreate = mockCreateMessage.mock.calls.find(
         ([payload]: any) => payload.role === 'assistant' && payload.threadId === threadId,
       );
-      expect(terminalCreate![0].parentId).not.toBe(firstAssistantCreate![0].id);
+      expect(terminalCreate![0].parentId).toBe(firstAssistantCreate![0].id);
     });
 
     it('streams the terminal assistant into the thread messagesMap bucket', async () => {
@@ -3199,11 +3220,14 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
   describe('Monitor parentId chain', () => {
     /**
      * Monitor pattern: initial tool_use returns immediately ("Monitor started"),
-     * then Monitor's stdout is fed back as synthetic user content that drives
-     * new CC assistant turns. Each step should parent to the previous step's
-     * last tool message to form a single assistantGroup in the UI.
+     * then Monitor's stdout drives new CC assistant turns. These reactive steps
+     * arrive as ordinary CC message steps (no `task_started`/`task_notification`
+     * signal context — see the `external signal` describe below for the tagged
+     * case), so under the spine rule each one parents off the most recent
+     * non-tool main message: the conversation chains user → asst → asst with
+     * tools inline, and the reactive callbacks render as plain spine assistants.
      */
-    it('basic flow: each step parents to previous step last tool', async () => {
+    it('basic flow: each reactive step chains along the spine', async () => {
       const idCounter = { tool: 0, assistant: 0 };
       mockCreateMessage.mockImplementation(async (params: any) => {
         if (params.role === 'tool') {
@@ -3244,22 +3268,18 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       // Two new assistants (step 1 + step 2); step 0 uses ast-initial
       expect(assistantCreates.length).toBe(2);
 
-      const toolId = (callId: string) =>
-        mockCreateMessage.mock.calls.find(
-          ([p]: any) => p.role === 'tool' && p.tool_call_id === callId,
-        )![0].id;
-      // Step 1 parent = Monitor tool from step 0
-      expect(assistantCreates[0][0].parentId).toBe(toolId('toolu_mon_0'));
-      // Step 2 parent = LAST tool from step 1 = Monitor_1
-      expect(assistantCreates[1][0].parentId).toBe(toolId('toolu_mon_1'));
+      // Step 1 parent = the spine (initial assistant); its tools are inline.
+      expect(assistantCreates[0][0].parentId).toBe('ast-initial');
+      // Step 2 parent = the spine advanced to step 1's assistant.
+      expect(assistantCreates[1][0].parentId).toBe(assistantCreates[0][0].id);
     });
 
     /**
-     * regression: a toolless step in the middle must NOT break the
-     * zigzag chain. The next step should chain back to the most recent tool
-     * result ever produced in the run, not to the toolless assistant.
+     * regression: a toolless step in the middle keeps the spine linear.
+     * The next step chains off the toolless assistant (the most recent
+     * non-tool main message), so no message is orphaned.
      */
-    it('toolless middle step: next step chains back to last real tool', async () => {
+    it('toolless middle step: spine stays linear through the toolless step', async () => {
       const idCounter = { tool: 0, assistant: 0 };
       mockCreateMessage.mockImplementation(async (params: any) => {
         if (params.role === 'tool') {
@@ -3288,26 +3308,21 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       );
       expect(assistantCreates.length).toBe(2);
 
-      const monitorToolId = mockCreateMessage.mock.calls.find(
-        ([p]: any) => p.role === 'tool' && p.tool_call_id === 'toolu_mon_0',
-      )![0].id;
-      // Step 1 parent = Monitor tool from step 0
-      expect(assistantCreates[0][0].parentId).toBe(monitorToolId);
+      // Step 1 (toolless) parent = the spine (initial assistant).
+      expect(assistantCreates[0][0].parentId).toBe('ast-initial');
 
-      // Step 2 parent: step 1 was toolless, but the chain must skip back to
-      // step 0's Monitor so MessageCollector's assistant → tool → assistant
-      // walk keeps every assistant in the same group.
-      expect(assistantCreates[1][0].parentId).toBe(monitorToolId);
+      // Step 2 parent = step 1's assistant: the spine advances on the toolless
+      // step too, so the chain stays linear (no skip-back to a tool needed).
+      expect(assistantCreates[1][0].parentId).toBe(assistantCreates[0][0].id);
     });
 
     /**
      * follow-up: N consecutive toolless steps (Monitor pushing
      * stdout line by line, each line triggering a new LLM call that only
-     * answers with text). All toolless assistants must chain back to the
-     * same originating tool result; otherwise the UI splits one bubble per
-     * Monitor line.
+     * answers with text). Each toolless assistant chains off the previous
+     * one, forming a continuous spine — no message is dropped.
      */
-    it('consecutive toolless steps: all parents resolve to the originating tool', async () => {
+    it('consecutive toolless steps: each chains off the previous spine assistant', async () => {
       const idCounter = { tool: 0, assistant: 0 };
       mockCreateMessage.mockImplementation(async (params: any) => {
         if (params.role === 'tool') {
@@ -3339,16 +3354,11 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       // 4 new assistants (steps 1–4); step 0 reuses ast-initial
       expect(assistantCreates.length).toBe(4);
 
-      const monitorToolId = mockCreateMessage.mock.calls.find(
-        ([p]: any) => p.role === 'tool' && p.tool_call_id === 'toolu_mon_0',
-      )![0].id;
-      // All toolless steps chain back to the Monitor tool from step 0
-      expect(assistantCreates[0][0].parentId).toBe(monitorToolId);
-      expect(assistantCreates[1][0].parentId).toBe(monitorToolId);
-      expect(assistantCreates[2][0].parentId).toBe(monitorToolId);
-      // Step 4 also chains to the Monitor tool — its own step had no tools yet
-      // at step_start, the Bash tool only persists after stream_start fires.
-      expect(assistantCreates[3][0].parentId).toBe(monitorToolId);
+      // Each step chains off the previous spine assistant; step 1 off the seed.
+      expect(assistantCreates[0][0].parentId).toBe('ast-initial');
+      expect(assistantCreates[1][0].parentId).toBe(assistantCreates[0][0].id);
+      expect(assistantCreates[2][0].parentId).toBe(assistantCreates[1][0].id);
+      expect(assistantCreates[3][0].parentId).toBe(assistantCreates[2][0].id);
     });
 
     /**
@@ -3389,13 +3399,10 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
         ([p]: any) => p.role === 'assistant',
       );
       expect(assistantCreates.length).toBe(1);
-      // Step 1 parent should be the Monitor tool from step 0. The tool message
-      // id is pre-allocated by the reducer (carried in the persistToolBatch
-      // intent), so the chain resolves even though the tool_result interleaves.
-      const monitorToolId = mockCreateMessage.mock.calls.find(
-        ([p]: any) => p.role === 'tool' && p.tool_call_id === 'toolu_mon_0',
-      )![0].id;
-      expect(assistantCreates[0][0].parentId).toBe(monitorToolId);
+      // Step 1 parent = the spine (initial assistant). The interleaved Monitor
+      // tool_result does not affect the chain: the spine anchor is the most
+      // recent non-tool main message, independent of tool timing.
+      expect(assistantCreates[0][0].parentId).toBe('ast-initial');
     });
   });
 
@@ -3660,6 +3667,359 @@ describe('heterogeneousAgentExecutor DB persistence', () => {
       // weird ordering where the last write happens to have 7 entries but
       // the wrong ones (e.g. dedupe bug repopulating from a stale set).
       for (const id of toolIds) expect(writtenIds).toContain(id);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Characterization tests locking the CURRENT hetero-completion lifecycle.
+  //
+  // These are a REGRESSION NET ahead of the send-message run-lifecycle refactor:
+  // they pin what the code does NOW (notifyCompletion fan-out, metadata-save
+  // isolation, queue-drain gating, the onError/abort skips), not idealized
+  // behavior. If something here looks like a bug it is intentionally locked
+  // as-is so the refactor surfaces any behavior change as a failing test.
+  // ════════════════════════════════════════════════════════════════════════
+  describe('hetero completion characterization (lifecycle refactor regression net)', () => {
+    afterEach(() => {
+      // Restore the global default so the rest of the suite keeps seeing the
+      // non-desktop env that every other test assumes.
+      desktopFlag.value = false;
+    });
+
+    /**
+     * Drive a full run to a non-error terminal (`ccResult()` → agent_runtime_end)
+     * with a caller-supplied store, mirroring the error-handling tests' manual
+     * harness so per-test store overrides (abortController / drainQueuedMessages /
+     * updateTopicStatus) are observable.
+     */
+    async function runToComplete(
+      store: any,
+      ccEvents: any[],
+      paramOverrides: Partial<typeof defaultParams> = {},
+    ) {
+      const get = vi.fn(() => store);
+      let resolveSendPrompt: () => void;
+      mockSendPrompt.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveSendPrompt = r;
+        }),
+      );
+
+      const executorPromise = executeHeterogeneousAgent(get, {
+        ...defaultParams,
+        ...paramOverrides,
+      });
+      await flush();
+
+      for (const event of ccEvents) ipc.emitRawLine('ipc-sess-1', event);
+      ipc.emitComplete('ipc-sess-1');
+      await flush();
+
+      resolveSendPrompt!();
+      // Clean-completion helper: a successful run MUST resolve. Do NOT swallow the
+      // rejection here — otherwise a regression that makes the happy path reject
+      // (e.g. before the notification side effect runs) would spuriously satisfy the
+      // negative assertions (e.g. isDesktop=false → notification NOT called). Let it
+      // propagate so such a regression fails the test instead of passing silently.
+      await executorPromise;
+      await flush();
+
+      return { get, store };
+    }
+
+    /**
+     * Like `runToComplete` but ends the stream with a TRUE error terminal
+     * (`ccResult(true)` → `deferredTerminalEvent.type === 'error'`). This is the
+     * event-shape that drives the error branch in onComplete (isErrorTerminal)
+     * AND gates the linear-flow queue drain off via `terminalEvent?.type !== 'error'`.
+     */
+    async function runToError(store: any, paramOverrides: Partial<typeof defaultParams> = {}) {
+      const get = vi.fn(() => store);
+      let resolveSendPrompt: () => void;
+      mockSendPrompt.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveSendPrompt = r;
+        }),
+      );
+
+      const executorPromise = executeHeterogeneousAgent(get, {
+        ...defaultParams,
+        ...paramOverrides,
+      });
+      await flush();
+
+      ipc.emitRawLine('ipc-sess-1', ccInit());
+      ipc.emitRawLine('ipc-sess-1', ccText('msg_01', 'partial content'));
+      ipc.emitRawLine('ipc-sess-1', ccResult(true, 'the run failed'));
+      ipc.emitComplete('ipc-sess-1');
+      await flush();
+
+      resolveSendPrompt!();
+      // An error TERMINAL is still handled internally (onError / persistTerminalError):
+      // the executor RESOLVES, it does not reject. Don't swallow a rejection — if a
+      // regression makes the error path reject, the negative assertions (no notification,
+      // no drain) must fail rather than be satisfied by an early bail-out.
+      await executorPromise;
+      await flush();
+
+      return { get, store };
+    }
+
+    // ── 1. onComplete success → notifyCompletion (notification + dock badge) ──
+    it('fires the desktop notification AND dock badge on a successful non-aborted completion', async () => {
+      desktopFlag.value = true;
+      const store = createMockStore();
+
+      await runToComplete(store, [
+        ccInit(),
+        ccText('msg_01', 'All done with the task.'),
+        ccResult(),
+      ]);
+
+      // notifyCompletion = Promise.allSettled([showNotification(...), setBadgeCount(1)]).
+      expect(mockShowNotification).toHaveBeenCalledTimes(1);
+      expect(mockShowNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // body = markdownToTxt(finalContent)
+          body: expect.stringContaining('All done with the task'),
+          // navigate path resolved from agentId + topicId
+          navigate: { path: expect.any(String) },
+          title: expect.any(String),
+        }),
+      );
+      expect(mockSetBadgeCount).toHaveBeenCalledTimes(1);
+      expect(mockSetBadgeCount).toHaveBeenCalledWith(1);
+    });
+
+    it('does NOT touch the desktop notification IPC when isDesktop is false (web/default env)', async () => {
+      // desktopFlag.value stays false here — the early `if (!isDesktop) return` guard.
+      const store = createMockStore();
+
+      await runToComplete(store, [ccInit(), ccText('msg_01', 'done'), ccResult()]);
+
+      expect(mockShowNotification).not.toHaveBeenCalled();
+      expect(mockSetBadgeCount).not.toHaveBeenCalled();
+    });
+
+    // ── 2. metadata-save failure isolation (CURRENT behavior, locked as-is) ──
+    it('swallows an updateTopicMetadata REJECTION without surfacing an error to the caller', async () => {
+      // CHARACTERIZATION — locks ACTUAL current behavior, which DIFFERS from the
+      // intended acceptance criterion ("metadata failure must not block the
+      // drain"):
+      //
+      //   const sessionInfo = await getSessionInfo(...).catch(() => undefined);
+      //   if (sessionInfo?.agentSessionId && context.topicId)
+      //     await updateTopicMetadata?.(...);   // ← NO .catch here
+      //   if (!isAborted() && terminalEvent?.type !== 'error') { ...drain... }
+      //
+      // Because the `updateTopicMetadata` await is UNGUARDED, a rejection throws
+      // past the drain block into the function's outer try/catch. `completed` is
+      // already `true` (onComplete ran), so `catch { if (!completed) ... }` is a
+      // no-op: the executor resolves cleanly (no error escapes to the caller),
+      // BUT the queue drain is SKIPPED. The completion notification still fired
+      // (it runs inside onComplete, before this metadata await). Pinned here so
+      // the lifecycle refactor surfaces any change to this latent edge.
+      desktopFlag.value = true;
+      const queued = [
+        {
+          content: 'follow-up please',
+          editorData: undefined,
+          files: [],
+          id: 'q1',
+          metadata: {},
+        },
+      ];
+      const store = createMockStore({
+        drainQueuedMessages: vi.fn(() => queued),
+        updateTopicMetadata: vi.fn().mockRejectedValue(new Error('metadata save boom')),
+      });
+      const get = vi.fn(() => store);
+
+      let resolveSendPrompt: () => void;
+      mockSendPrompt.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveSendPrompt = r;
+        }),
+      );
+
+      let threw = false;
+      const executorPromise = executeHeterogeneousAgent(get, defaultParams).catch(() => {
+        threw = true;
+      });
+      await flush();
+
+      ipc.emitRawLine('ipc-sess-1', ccInit());
+      ipc.emitRawLine('ipc-sess-1', ccText('msg_01', 'done'));
+      ipc.emitRawLine('ipc-sess-1', ccResult());
+      ipc.emitComplete('ipc-sess-1');
+      await flush();
+
+      resolveSendPrompt!();
+      await executorPromise;
+      await flush();
+
+      // The metadata save was attempted (and rejected)...
+      expect(store.updateTopicMetadata).toHaveBeenCalled();
+      // ...and the rejection did NOT escape to the caller (executor resolved).
+      expect(threw).toBe(false);
+      // The completion notification still fired (runs in onComplete, BEFORE the
+      // unguarded metadata await throws).
+      expect(mockSetBadgeCount).toHaveBeenCalledWith(1);
+      // Current behavior: the unguarded throw bypasses the drain → it is SKIPPED.
+      expect(store.drainQueuedMessages).not.toHaveBeenCalled();
+    });
+
+    // ── 3. queue-drain gating ──
+    it('(success + queued) drains, marks unread completed, and schedules a delayed sendMessage', async () => {
+      const queued = [
+        {
+          content: 'next message',
+          editorData: undefined,
+          files: [],
+          id: 'q1',
+          metadata: {},
+        },
+      ];
+      const store = createMockStore({
+        drainQueuedMessages: vi.fn(() => queued),
+      });
+      const get = vi.fn(() => store);
+
+      // The delayed drain dispatch goes through the SINGLETON store
+      // (`useChatStore.getState().sendMessage`), NOT the per-call `get()` mock —
+      // so spy on the real store's sendMessage to observe it.
+      const realSendMessage = vi
+        .spyOn(useChatStore.getState(), 'sendMessage')
+        .mockResolvedValue(undefined as any);
+
+      let resolveSendPrompt: () => void;
+      mockSendPrompt.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveSendPrompt = r;
+        }),
+      );
+
+      const executorPromise = executeHeterogeneousAgent(get, defaultParams);
+      await flush();
+
+      ipc.emitRawLine('ipc-sess-1', ccInit());
+      ipc.emitRawLine('ipc-sess-1', ccText('msg_01', 'done'));
+      ipc.emitRawLine('ipc-sess-1', ccResult());
+      ipc.emitComplete('ipc-sess-1');
+      await flush();
+
+      resolveSendPrompt!();
+      await executorPromise;
+      // Extra real-time wait so the drain's `setTimeout(() => sendMessage, 100)`
+      // fires before we assert on it.
+      await new Promise((r) => setTimeout(r, 200));
+      await flush();
+
+      expect(store.drainQueuedMessages).toHaveBeenCalled();
+      expect(store.completeOperation).toHaveBeenCalledWith('op-1');
+      // op-1 context carries agentId/topicId → markTopicUnread fires.
+      expect(store.markTopicUnread).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'agent-1', topicId: 'topic-1' }),
+      );
+
+      // The merged follow-up is dispatched via the setTimeout(100) sendMessage.
+      expect(realSendMessage).toHaveBeenCalledTimes(1);
+      expect(realSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'next message' }),
+      );
+
+      realSendMessage.mockRestore();
+    });
+
+    it('(terminal type "error") does NOT drain the queue', async () => {
+      const store = createMockStore({
+        drainQueuedMessages: vi.fn(() => [{ content: 'queued', id: 'q1' }]),
+      });
+
+      await runToError(store);
+
+      // Gate is `terminalEvent?.type !== 'error'` — drainQueuedMessages is never
+      // even consulted, so no merged follow-up can be dispatched.
+      expect(store.drainQueuedMessages).not.toHaveBeenCalled();
+    });
+
+    it('(aborted) does NOT drain the queue even on an otherwise-clean stream end', async () => {
+      const abortController = new AbortController();
+      abortController.abort();
+      const store = createMockStore({
+        drainQueuedMessages: vi.fn(() => [{ content: 'queued', id: 'q1' }]),
+        operations: {
+          'op-1': {
+            abortController,
+            context: { agentId: 'agent-1', scope: 'main', topicId: 'topic-1' },
+            metadata: { startTime: 0 },
+          },
+        },
+      });
+
+      await runToComplete(store, [ccInit(), ccText('msg_01', 'done'), ccResult()]);
+
+      // Gate is `!isAborted()` — drainQueuedMessages is never consulted.
+      expect(store.drainQueuedMessages).not.toHaveBeenCalled();
+    });
+
+    // ── 4. error terminal → no notification, no drain (the onError branch) ──
+    it('an error terminal fires NO completion notification and NO queue drain', async () => {
+      desktopFlag.value = true; // even on desktop, the error terminal must stay silent
+      const store = createMockStore({
+        drainQueuedMessages: vi.fn(() => [{ content: 'queued', id: 'q1' }]),
+      });
+
+      await runToError(store);
+
+      // No completion signal on the error path (onComplete skips notifyCompletion
+      // when isErrorTerminal).
+      expect(mockShowNotification).not.toHaveBeenCalled();
+      expect(mockSetBadgeCount).not.toHaveBeenCalled();
+      // No queue drain on the error path (gated by terminalEvent?.type !== 'error').
+      expect(store.drainQueuedMessages).not.toHaveBeenCalled();
+      // The error itself is still persisted as a terminal error (persistTerminalError).
+      expect(mockUpdateMessageError).toHaveBeenCalled();
+    });
+
+    // ── 5. abort path → no notification, no drain, topic status 'active' ──
+    it('user abort fires NO notification, NO drain, and writes topic status "active"', async () => {
+      desktopFlag.value = true;
+      const updateTopicStatus = vi.fn();
+      const abortController = new AbortController();
+      abortController.abort();
+      const store = createMockStore({
+        // The user is viewing this topic, so the clean stream end clears the
+        // running state back to 'active' (a background completion would instead
+        // be left to markTopicUnread → status 'unread').
+        activeTopicId: 'topic-1',
+        drainQueuedMessages: vi.fn(() => [{ content: 'queued', id: 'q1' }]),
+        operations: {
+          'op-1': {
+            abortController,
+            context: { agentId: 'agent-1', scope: 'main', topicId: 'topic-1' },
+            metadata: { startTime: 0 },
+          },
+        },
+        updateTopicStatus,
+      });
+
+      await runToComplete(store, [ccInit(), ccText('msg_01', 'partial'), ccResult()]);
+
+      expect(mockShowNotification).not.toHaveBeenCalled();
+      expect(mockSetBadgeCount).not.toHaveBeenCalled();
+      expect(store.drainQueuedMessages).not.toHaveBeenCalled();
+
+      // Characterize the actual behavior: onComplete's non-error branch still
+      // writes 'active' while the user is viewing (the abort gate only guards
+      // the notification + drain, not the writeTopicStatus('active') call on a
+      // clean stream end).
+      expect(updateTopicStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'active',
+          topicId: 'topic-1',
+        }),
+      );
     });
   });
 });

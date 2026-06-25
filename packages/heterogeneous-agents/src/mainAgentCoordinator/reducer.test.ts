@@ -156,21 +156,21 @@ describe('main agent reducer', () => {
     expect(ofKind(second.intents, 'persistToolBatch')[0].tools[0].isNew).toBe(false);
   });
 
-  it('opens a new turn chained off the previous turn last tool', () => {
+  it('opens a new turn chained off the prior assistant (the spine), not its tool', () => {
     const { steps } = run([
       textEvent('first'),
-      toolsEvent([tool('t1')]), // → msg_1
+      toolsEvent([tool('t1')]), // → msg_1, an inline tool child of A0
       toolResultEvent('t1', 'ok'),
-      newStepEvent(), // → new assistant msg_2, parent = msg_1
+      newStepEvent(), // → new assistant msg_2, parent = A0 (spine); the tool is inline
     ]);
     const flush = ofKind(steps[3], 'persistAssistant')[0];
     expect(flush).toMatchObject({ content: 'first', messageId: 'A0' });
     const created = ofKind(steps[3], 'createAssistant')[0];
-    expect(created).toMatchObject({ messageId: 'msg_2', parentId: 'msg_1' });
+    expect(created).toMatchObject({ messageId: 'msg_2', parentId: 'A0' });
   });
 
-  // ─── The 断链 regression: toolless reactive (Monitor) turns must NOT fork ───
-  it('re-mounts toolless signal turns onto the source tool, not the prior assistant', () => {
+  // ─── Signal/反应式 turns stay tool-mounted; the next normal turn resumes the spine ───
+  it('mounts signal turns on the source tool, and resumes the spine on the next normal turn', () => {
     const { steps, state } = run([
       textEvent('watching build'),
       toolsEvent([tool('t1')]), // Monitor → msg_1
@@ -186,15 +186,19 @@ describe('main agent reducer', () => {
       .flatMap((s) => ofKind(s, 'createAssistant'))
       .map((c) => ({ messageId: c.messageId, parentId: c.parentId, signalType: c.signal?.type }));
 
-    // EVERY turn after the Monitor tool hangs off msg_1 (the source tool),
-    // forming a flat fan-out — NOT a linear msg_2 → msg_3 → msg_4 chain that
-    // collectAssistantChain would sever at the first signal-tagged assistant.
+    // The two signal-tagged reactive turns (msg_2, msg_3) mount on the source
+    // tool (msg_1) so the reader renders them as tool-child callbacks. The
+    // natural continuation (msg_4, no signal) re-mounts on the SPINE (A0, the
+    // pre-callback assistant) — NOT on a signal callback (which the reader skips,
+    // orphaning everything after it) and NOT fanned out onto the tool.
     expect(created).toEqual([
       { messageId: 'msg_2', parentId: 'msg_1', signalType: 'tool-stdout' },
       { messageId: 'msg_3', parentId: 'msg_1', signalType: 'tool-stdout' },
-      { messageId: 'msg_4', parentId: 'msg_1', signalType: undefined },
+      { messageId: 'msg_4', parentId: 'A0', signalType: undefined },
     ]);
-    // The next real tool advances the chain fallback forward.
+    // Signal turns did NOT advance the spine; the next real tool advances the
+    // signal anchor forward.
+    expect(state.lastSpineMessageId).toBe('msg_4');
     expect(state.lastToolMsgIdEver).toBe('msg_5');
   });
 
@@ -329,5 +333,49 @@ describe('main agent reducer', () => {
       tools: [...state.toolState.toolMsgIdByCallId],
     });
     expect(after).toBe(before);
+  });
+});
+
+// A `newStep` carries the turn's CC message.id; the reducer records it as the
+// turn idempotency key and dedupes a replay (cold-replica BatchIngester retry).
+const newStepWithId = (messageId?: string) => ({
+  data: { messageId, newStep: true },
+  type: 'stream_start',
+});
+
+describe('reduceMainAgent — newStep idempotency key', () => {
+  it('opens a turn on a new message.id and records it as currentMainMessageId', () => {
+    const { state, steps } = run([textEvent('first'), newStepWithId('M2')]);
+    const created = ofKind(steps[1], 'createAssistant');
+    expect(created).toHaveLength(1);
+    expect(created[0].mainMessageId).toBe('M2');
+    expect(state.currentMainMessageId).toBe('M2');
+    expect(state.currentAssistantId).toBe('msg_1');
+  });
+
+  it('does NOT open a second assistant when the SAME message.id newStep is replayed', () => {
+    const { state, steps } = run([
+      textEvent('first'),
+      newStepWithId('M2'), // opens msg_1
+      newStepWithId('M2'), // replay (cold-replica retry) → must be a no-op
+    ]);
+    expect(ofKind(steps[1], 'createAssistant')).toHaveLength(1);
+    expect(ofKind(steps[2], 'createAssistant')).toHaveLength(0);
+    expect(steps[2]).toEqual([]);
+    // Still anchored on the single turn assistant — no fork.
+    expect(state.currentAssistantId).toBe('msg_1');
+  });
+
+  it('still opens a genuine new turn when the message.id changes', () => {
+    const { state, steps } = run([textEvent('first'), newStepWithId('M2'), newStepWithId('M3')]);
+    expect(ofKind(steps[1], 'createAssistant')).toHaveLength(1);
+    expect(ofKind(steps[2], 'createAssistant')).toHaveLength(1);
+    expect(state.currentMainMessageId).toBe('M3');
+    expect(state.currentAssistantId).toBe('msg_2');
+  });
+
+  it('falls back to opening a turn when no message.id is present (legacy events)', () => {
+    const { steps } = run([textEvent('first'), newStepWithId(undefined)]);
+    expect(ofKind(steps[1], 'createAssistant')).toHaveLength(1);
   });
 });

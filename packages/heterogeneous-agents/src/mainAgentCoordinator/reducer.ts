@@ -100,12 +100,23 @@ const delegateSubagent = (
 // ─── Chain rule ───
 
 /**
- * Parent for the NEXT turn's assistant. Prefer the run-lifetime last tool
- * message (`lastToolMsgIdEver`) so toolless reactive turns don't fork the wire;
- * fall back to the current assistant only before any tool has been seen.
+ * Parent for the NEXT turn's assistant (write-side spine).
+ *
+ * Normal turns parent off the run's spine (`lastSpineMessageId`, the most recent
+ * non-tool / non-signal main message) so the persisted shape is
+ * `user → asst → asst …` with tools as inline children; the read side
+ * reconstructs the zigzag.
+ *
+ * Signal / reactive toolless turns (Monitor stdout pushes etc.) are the one
+ * exception: they parent off the run's most recent tool (`lastToolMsgIdEver`)
+ * so the reader renders them as tool-child callbacks (`collectFlatSignalCallbacks`)
+ * instead of spine turns. They fall back to the spine only before any tool has
+ * been seen.
  */
-const computeTurnParentId = (state: MainAgentRunState): string =>
-  state.lastToolMsgIdEver ?? state.currentAssistantId;
+const computeTurnParentId = (state: MainAgentRunState, data: any): string => {
+  if (data?.externalSignal) return state.lastToolMsgIdEver ?? state.lastSpineMessageId;
+  return state.lastSpineMessageId;
+};
 
 // ─── Per-event handlers ───
 
@@ -123,14 +134,18 @@ const openTurn = (state: MainAgentRunState, data: any, ctx: MainAgentReduceCtx):
     intents.push({ kind: 'persistAssistant', messageId: state.currentAssistantId, ...flush });
   }
 
-  // 2. Open the new turn's assistant, chained off the last tool (chain rule).
+  // 2. Open the new turn's assistant, chained off the spine (chain rule);
+  //    signal/reactive turns parent off the last tool — see computeTurnParentId.
   const messageId = ctx.newId('message');
+  const mainMessageId = typeof data?.messageId === 'string' ? data.messageId : undefined;
+  const isSignalTurn = !!data?.externalSignal;
   intents.push({
     agentId: ctx.agentId,
     kind: 'createAssistant',
+    mainMessageId,
     messageId,
     model: state.turnModel,
-    parentId: computeTurnParentId(state),
+    parentId: computeTurnParentId(state, data),
     provider: state.turnProvider,
     signal: data?.externalSignal,
     topicId: ctx.topicId,
@@ -139,6 +154,11 @@ const openTurn = (state: MainAgentRunState, data: any, ctx: MainAgentReduceCtx):
   // 3. Advance: model/provider carry across (a fresh turn_metadata overwrites).
   const next = copyState(state);
   next.currentAssistantId = messageId;
+  // The spine only advances on NORMAL turns — a signal/reactive turn is a
+  // tool-child callback, so the next normal turn re-mounts on the pre-callback
+  // spine assistant, not on the callback.
+  if (!isSignalTurn) next.lastSpineMessageId = messageId;
+  next.currentMainMessageId = mainMessageId;
   next.accContent = '';
   next.accReasoning = '';
   next.lastTextSnapshotSeq = 0;
@@ -359,7 +379,17 @@ export const reduce = (
   const data = event.data ?? {};
   switch (event.type) {
     case 'stream_start': {
-      return data?.newStep ? openTurn(state, data, ctx) : streamInit(state, data);
+      if (!data?.newStep) return streamInit(state, data);
+      // Idempotency: a `newStep` whose CC message.id matches the turn already
+      // open is a REPLAY (BatchIngester retry reprocessed on a cold replica
+      // with an empty in-memory `processedKeys`). Opening again would mint a
+      // duplicate assistant and orphan the first as a usage-only empty shell.
+      // The adapter only emits `newStep` when message.id CHANGES, so a genuine
+      // new turn never collides with the current id.
+      if (typeof data.messageId === 'string' && data.messageId === state.currentMainMessageId) {
+        return { intents: [], state };
+      }
+      return openTurn(state, data, ctx);
     }
     case 'stream_chunk': {
       return reduceStreamChunk(state, data, ctx);
